@@ -4,12 +4,19 @@ A dashboard card for the
 [Personal Wakeup](https://github.com/mvheimburg/personal_wakeup_hacs)
 integration.
 
+![The card armed and ringing](images/screenshot.png)
+
 - Big **Stop** button and one-tap **Snooze** presets while the alarm is
   rising, ringing or snoozed.
 - Alarm time, weekday repeat, skip-next, light fade, music fade, volume and
   playlist, all editable in place.
 - Enabled / only-when-home switches, next alarm countdown, a "Test now" button.
 - Failed service calls show a Home Assistant toast instead of failing silently.
+
+On a phone the card stacks into a single column, with the Stop button and the
+snooze presets sized for a half-asleep thumb:
+
+<img src="images/ringing-phone.png" alt="The card ringing at phone width" width="320">
 
 ## Install
 
