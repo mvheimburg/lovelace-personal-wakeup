@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { property, state, customElement } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
 import "./lovelace-personal-wakeup-card-editor";
 
 interface HassEntity {
@@ -10,25 +11,59 @@ interface HassEntity {
 
 interface HomeAssistant {
   states: Record<string, HassEntity>;
+  locale?: { language?: string };
   callService(
     domain: string,
     service: string,
     data?: Record<string, any>
-  ): void;
-  formatDateTime(date: Date): string;
+  ): Promise<unknown>;
 }
 
 interface PersonalWakeupCardConfig {
   type: string;
   entity: string;
   name?: string;
+  snooze_presets?: number[];
 }
+
+const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const WEEKDAY_LABELS: Record<string, string> = {
+  mon: "Mo",
+  tue: "Tu",
+  wed: "We",
+  thu: "Th",
+  fri: "Fr",
+  sat: "Sa",
+  sun: "Su"
+};
+const DEFAULT_SNOOZE_PRESETS = [5, 10, 15];
+
+const STATE_LABELS: Record<string, string> = {
+  disarmed: "Off",
+  armed: "Armed",
+  rising: "Waking up",
+  ringing: "Ringing",
+  snoozed: "Snoozed",
+  unavailable: "Unavailable",
+  unknown: "Unknown"
+};
+
+const STATE_ICONS: Record<string, string> = {
+  disarmed: "mdi:alarm-off",
+  armed: "mdi:alarm",
+  rising: "mdi:weather-sunset-up",
+  ringing: "mdi:alarm-light",
+  snoozed: "mdi:alarm-snooze"
+};
 
 @customElement("lovelace-personal-wakeup-card")
 export class PersonalWakeupCard extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: PersonalWakeupCardConfig;
-  @state() private _snoozeMinutes: number | null = null;
+  /** Live slider values while dragging, keyed by attribute name. */
+  @state() private _draft: Record<string, number> = {};
+  @state() private _busy: string | null = null;
+  private _tick?: number;
 
   public setConfig(config: PersonalWakeupCardConfig): void {
     if (!config.entity) {
@@ -37,490 +72,795 @@ export class PersonalWakeupCard extends LitElement {
     this._config = config;
   }
 
-  // Let Lovelace know how big this card is
   public getCardSize(): number {
-    return 4;
+    return 6;
   }
 
-  // Called by HA visual editor
   public static getConfigElement(): Element {
     return document.createElement("lovelace-personal-wakeup-card-editor");
   }
 
-  public static getStubConfig(): PersonalWakeupCardConfig {
+  public static getStubConfig(hass?: HomeAssistant): PersonalWakeupCardConfig {
+    const found = hass
+      ? Object.values(hass.states).find(
+          (s) =>
+            s.entity_id.startsWith("sensor.") &&
+            "next_fire" in s.attributes &&
+            "time_of_day" in s.attributes
+        )
+      : undefined;
     return {
       type: "custom:lovelace-personal-wakeup-card",
-      entity: "sensor.wakeup_alarm"
+      entity: found?.entity_id ?? ""
     };
   }
 
-  private _getEntity(): HassEntity | undefined {
-    if (!this.hass || !this._config) return undefined;
-    return this.hass.states[this._config.entity];
+  connectedCallback(): void {
+    super.connectedCallback();
+    // Re-render every 30 s so "in 12 min" style countdowns stay honest.
+    this._tick = window.setInterval(() => this.requestUpdate(), 30_000);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this._tick) window.clearInterval(this._tick);
+  }
+
+  // ---------------------------------------------------------------- helpers
+
+  private _entity(): HassEntity | undefined {
+    return this.hass?.states?.[this._config?.entity];
+  }
+
+  private _lang(): string | undefined {
+    return this.hass?.locale?.language || undefined;
+  }
+
+  private _fmtTime(value: string | null | undefined): string {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleTimeString(this._lang(), { hour: "2-digit", minute: "2-digit" });
+  }
+
+  private _fmtDay(value: string | null | undefined): string {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const now = new Date();
+    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const dayDiff = Math.round((startOf(d) - startOf(now)) / 86_400_000);
+    if (dayDiff === 0) return "Today";
+    if (dayDiff === 1) return "Tomorrow";
+    return d.toLocaleDateString(this._lang(), { weekday: "short" });
+  }
+
+  private _fmtRelative(value: string | null | undefined): string {
+    if (!value) return "";
+    const diffMin = Math.round((new Date(value).getTime() - Date.now()) / 60_000);
+    if (Number.isNaN(diffMin)) return "";
+    const abs = Math.abs(diffMin);
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    const span = h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
+    return diffMin >= 0 ? `in ${span}` : `${span} ago`;
   }
 
   private _normalizeTime(value: unknown): string {
     if (!value) return "07:00";
     const s = String(value);
-
-    // "HH:MM"
-    if (s.length === 5 && s.includes(":")) {
-      return s;
-    }
-    // "HH:MM:SS"
-    if (s.length >= 8 && s.includes(":") && s.indexOf(":") === 2) {
-      return s.slice(0, 5);
-    }
-    // ISO-ish
-    const d = new Date(s);
-    if (!Number.isNaN(d.getTime())) {
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${hh}:${mm}`;
-    }
-    return "07:00";
+    return s.length >= 5 && s.indexOf(":") === 2 ? s.slice(0, 5) : "07:00";
   }
 
-  private _formatNextFire(value: string | null): string {
-    if (!value) return "Not scheduled";
+  private _toast(message: string): void {
+    this.dispatchEvent(
+      new CustomEvent("hass-notification", {
+        detail: { message },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  private async _call(
+    service: string,
+    data: Record<string, unknown> = {},
+    label = service
+  ): Promise<void> {
+    this._busy = label;
     try {
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return value;
-      // Use HA formatting if available
-      if (this.hass && "formatDateTime" in this.hass) {
-        return (this.hass as any).formatDateTime(d);
-      }
-      return d.toLocaleString();
-    } catch {
-      return value;
+      await this.hass.callService("personal_wakeup", service, {
+        entity_id: this._config.entity,
+        ...data
+      });
+    } catch (err: any) {
+      const msg = err?.message || err?.error || String(err);
+      this._toast(`Wakeup alarm: ${service} failed (${msg})`);
+    } finally {
+      this._busy = null;
     }
   }
 
-  private _updateConfig(partial: Record<string, unknown>): void {
-    const entityId = this._config.entity;
-
-    this.hass.callService("personal_wakeup", "set_config", {
-      entity_id: entityId,
-      ...partial
-    });
+  private _set(partial: Record<string, unknown>): Promise<void> {
+    return this._call("set_config", partial, "set_config");
   }
 
-  private _triggerNow(): void {
-    const entityId = this._config.entity;
-
-    this.hass.callService("personal_wakeup", "trigger_now", {
-      entity_id: entityId
-    });
+  private _sliderInput(key: string, ev: Event): void {
+    const value = Number((ev.target as HTMLInputElement).value);
+    this._draft = { ...this._draft, [key]: value };
   }
 
-  private _snooze(): void {
-    const entityId = this._config.entity;
-    const stateObj = this._getEntity();
-    const defaultMinutes = Number(stateObj?.attributes?.snooze_minutes ?? 10);
-    const durationMinutes = this._snoozeMinutes ?? defaultMinutes;
-
-    this.hass.callService("personal_wakeup", "snooze", {
-      entity_id: entityId,
-      duration_minutes: durationMinutes
-    });
+  private async _sliderChange(key: string, ev: Event, scale = 1): Promise<void> {
+    const value = Number((ev.target as HTMLInputElement).value);
+    await this._set({ [key]: value * scale });
+    const draft = { ...this._draft };
+    delete draft[key];
+    this._draft = draft;
   }
 
-  private _stop(): void {
-    const entityId = this._config.entity;
-
-    this.hass.callService("personal_wakeup", "stop", {
-      entity_id: entityId
-    });
+  private _toggleWeekday(day: string, current: string[]): void {
+    const next = current.includes(day)
+      ? current.filter((d) => d !== day)
+      : [...current, day];
+    if (!next.length) {
+      this._toast("At least one weekday must stay selected");
+      return;
+    }
+    this._set({ weekdays: WEEKDAYS.filter((d) => next.includes(d)) });
   }
+
+  // ---------------------------------------------------------------- render
 
   protected render() {
-    const stateObj = this._getEntity();
+    const stateObj = this._entity();
     if (!stateObj) {
       return html`
         <ha-card>
           <div class="error">
+            <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
             Entity ${this._config?.entity || "(not set)"} not found
           </div>
         </ha-card>
       `;
     }
 
-    const attrs = stateObj.attributes;
-    const enabled = Boolean(attrs.enabled);
-    const requireHome = Boolean(attrs.require_home);
-    const timeOfDay = this._normalizeTime(attrs.time_of_day);
-    const fadeDuration = Number(attrs.fade_duration ?? 900);
-    const volume = Number(attrs.volume ?? 0.25);
-    const playlist = attrs.playlist ?? "";
-    const nextFire: string | null = attrs.next_fire ?? null;
-    const personEntity: string | null = attrs.person_entity ?? null;
-    const canSnooze =
-      Boolean(attrs.can_snooze) || stateObj.state === "triggered";
-    const canStop =
-      Boolean(attrs.can_stop) ||
-      stateObj.state === "triggered" ||
-      stateObj.state === "snoozed";
-    const defaultSnoozeMinutes = Number(attrs.snooze_minutes ?? 10);
-    const snoozeMinutes = this._snoozeMinutes ?? defaultSnoozeMinutes;
+    const a = stateObj.attributes;
+    const st = stateObj.state;
+    const active = st === "rising" || st === "ringing";
+    const snoozed = st === "snoozed";
+    const canStop = Boolean(a.can_stop) || active || snoozed;
+    const canSnooze = Boolean(a.can_snooze) || active || snoozed;
 
-    const fadeMinutes = Math.round(fadeDuration / 60);
-    const volumePercent = Math.round(volume * 100);
+    const enabled = Boolean(a.enabled);
+    const requireHome = Boolean(a.require_home);
+    const skipNext = Boolean(a.skip_next);
+    const timeOfDay = this._normalizeTime(a.time_of_day);
+    const weekdays: string[] = Array.isArray(a.weekdays) ? a.weekdays : [...WEEKDAYS];
+    const fadeMin = this._draft.fade_duration ?? Math.round(Number(a.fade_duration ?? 900) / 60);
+    const musicMin =
+      this._draft.fade_music_duration ??
+      Math.round(Number(a.fade_music_duration ?? 300) / 60);
+    const volume = this._draft.volume ?? Number(a.volume ?? 0.25);
+    const playlist: string = a.playlist ?? "";
+    const playlistOptions: string[] = Array.isArray(a.playlist_options)
+      ? a.playlist_options
+      : [];
+    const nextFire: string | null = a.next_fire ?? null;
+    const skippedFire: string | null = a.skipped_fire ?? null;
+    const snoozeUntil: string | null = a.snooze_until ?? null;
+    const runStarted: string | null = a.run_started ?? null;
+    const personEntity: string | null = a.person_entity ?? null;
+    const personState = personEntity ? this.hass.states[personEntity]?.state : undefined;
+    const defaultSnooze = Number(a.snooze_minutes ?? 10);
+    const presets = Array.from(
+      new Set([...(this._config.snooze_presets ?? DEFAULT_SNOOZE_PRESETS), defaultSnooze])
+    ).sort((x, y) => x - y);
 
-    const title =
-      this._config.name || stateObj.attributes.friendly_name || "Wakeup Alarm";
-
-    let playlistOptions: string[] = [];
-    if (Array.isArray(attrs.playlist_options)) {
-      playlistOptions = attrs.playlist_options as string[];
-    } else if (attrs.playlist_options) {
-      // handle string or anything weird by splitting on comma
-      playlistOptions = String(attrs.playlist_options)
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    }
+    const title = this._config.name || a.friendly_name || "Wakeup alarm";
+    const icon = STATE_ICONS[st] ?? "mdi:alarm";
 
     return html`
-      <ha-card>
+      <ha-card class=${classMap({ [`is-${st}`]: true })}>
         <div class="header">
-          <div class="title">${title}</div>
-          <div class="state-pill">${stateObj.state}</div>
+          <div class="header-main">
+            <div class="icon-wrap"><ha-icon icon=${icon}></ha-icon></div>
+            <div class="header-text">
+              <div class="title">${title}</div>
+              <div class="subtitle">${this._renderSubtitle(st, nextFire, snoozeUntil, runStarted)}</div>
+            </div>
+          </div>
+          <div class="pill">
+            <span class="dot"></span>${STATE_LABELS[st] ?? st}
+          </div>
         </div>
 
-        <div class="grid">
-          <div class="row horizontal">
-            <span class="label">Enabled</span>
-            <ha-switch
-              .checked=${enabled}
-              @change=${(e: Event) =>
-                this._updateConfig({
-                  enabled: (e.target as HTMLInputElement).checked
-                })}
-            ></ha-switch>
+        ${canStop
+          ? html`
+              <div class="hero">
+                <div class="hero-text">
+                  ${snoozed
+                    ? html`<span class="hero-title">Snoozed</span>
+                        <span class="hero-sub">Rings again at ${this._fmtTime(snoozeUntil)}
+                          <em>${this._fmtRelative(snoozeUntil)}</em></span>`
+                    : st === "rising"
+                      ? html`<span class="hero-title">Waking up</span>
+                          <span class="hero-sub">Light and music fading in since
+                            ${this._fmtTime(runStarted)}</span>`
+                      : html`<span class="hero-title">Ringing</span>
+                          <span class="hero-sub">Since ${this._fmtTime(runStarted)}</span>`}
+                </div>
+                <button
+                  class="stop"
+                  type="button"
+                  ?disabled=${this._busy === "stop"}
+                  @click=${() => this._call("stop")}
+                >
+                  <ha-icon icon="mdi:stop-circle-outline"></ha-icon>
+                  Stop
+                </button>
+                ${canSnooze
+                  ? html`
+                      <div class="snooze-row">
+                        <span class="snooze-label">
+                          <ha-icon icon="mdi:alarm-snooze"></ha-icon>Snooze
+                        </span>
+                        ${presets.map(
+                          (m) => html`
+                            <button
+                              class=${classMap({ preset: true, primary: m === defaultSnooze })}
+                              type="button"
+                              ?disabled=${this._busy === `snooze-${m}`}
+                              @click=${() =>
+                                this._call("snooze", { duration_minutes: m }, `snooze-${m}`)}
+                            >
+                              ${m} min
+                            </button>
+                          `
+                        )}
+                      </div>
+                    `
+                  : nothing}
+              </div>
+            `
+          : nothing}
+
+        <div class="settings">
+          <div class="toggles">
+            <label class="toggle">
+              <span>
+                <ha-icon icon="mdi:power"></ha-icon>
+                Enabled
+              </span>
+              <ha-switch
+                .checked=${enabled}
+                @change=${(e: Event) =>
+                  this._set({ enabled: (e.target as HTMLInputElement).checked })}
+              ></ha-switch>
+            </label>
+            <label class="toggle">
+              <span>
+                <ha-icon icon="mdi:home-account"></ha-icon>
+                Only when home
+                ${personEntity
+                  ? html`<small class=${classMap({ away: personState !== "home" })}>
+                      ${personState === "home" ? "home" : personState ?? "unknown"}
+                    </small>`
+                  : nothing}
+              </span>
+              <ha-switch
+                .checked=${requireHome}
+                ?disabled=${!personEntity}
+                @change=${(e: Event) =>
+                  this._set({ require_home: (e.target as HTMLInputElement).checked })}
+              ></ha-switch>
+            </label>
+            <label class="toggle">
+              <span>
+                <ha-icon icon="mdi:debug-step-over"></ha-icon>
+                Skip next
+                ${skipNext && skippedFire
+                  ? html`<small>${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}</small>`
+                  : nothing}
+              </span>
+              <ha-switch
+                .checked=${skipNext}
+                ?disabled=${!enabled}
+                @change=${(e: Event) =>
+                  this._set({ skip_next: (e.target as HTMLInputElement).checked })}
+              ></ha-switch>
+            </label>
           </div>
 
-          <div class="row horizontal">
-            <span class="label">Require home</span>
-            <ha-switch
-              .checked=${requireHome}
-              @change=${(e: Event) =>
-                this._updateConfig({
-                  require_home: (e.target as HTMLInputElement).checked
-                })}
-            ></ha-switch>
-          </div>
-
-          <div class="row">
-            <span class="label">Alarm time</span>
+          <div class="field time-field">
+            <span class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>Alarm time</span>
             <input
               class="time-input"
               type="time"
               .value=${timeOfDay}
               @change=${(e: Event) =>
-                this._updateConfig({
-                  time_of_day: (e.target as HTMLInputElement).value
-                })}
+                this._set({ time_of_day: (e.target as HTMLInputElement).value })}
             />
           </div>
 
-          <div class="row">
-            <span class="label">Fade duration (min)</span>
-            <ha-slider
-              min="1"
-              max="45"
-              step="1"
-              .value=${fadeMinutes}
-              @input=${(e: Event) =>
-                ((this.shadowRoot!.getElementById(
-                  "fade_value"
-                ) as HTMLElement).textContent =
-                  String(
-                    (e.target as HTMLInputElement).value
-                  ) + " min")}
-              @change=${(e: Event) =>
-                this._updateConfig({
-                  fade_duration:
-                    Number((e.target as HTMLInputElement).value) * 60
-                })}
-            ></ha-slider>
-            <span class="value" id="fade_value">${fadeMinutes} min</span>
+          <div class="field">
+            <span class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>Repeat</span>
+            <div class="weekdays">
+              ${WEEKDAYS.map(
+                (d) => html`
+                  <button
+                    type="button"
+                    class=${classMap({ day: true, on: weekdays.includes(d) })}
+                    @click=${() => this._toggleWeekday(d, weekdays)}
+                  >
+                    ${WEEKDAY_LABELS[d]}
+                  </button>
+                `
+              )}
+            </div>
           </div>
 
-          <div class="row">
-            <span class="label">Volume</span>
-            <ha-slider
-              min="0"
-              max="1"
-              step="0.05"
-              .value=${volume}
-              @input=${(e: Event) =>
-                ((this.shadowRoot!.getElementById(
-                  "volume_value"
-                ) as HTMLElement).textContent =
-                  String(
-                    Math.round(
-                      Number((e.target as HTMLInputElement).value) * 100
-                    )
-                  ) + "%")}
-              @change=${(e: Event) =>
-                this._updateConfig({
-                  volume: Number((e.target as HTMLInputElement).value)
-                })}
-            ></ha-slider>
-            <span class="value" id="volume_value">${volumePercent}%</span>
-          </div>
+          ${this._renderSlider("mdi:weather-sunset-up", "Light fade", "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60)}
+          ${this._renderSlider("mdi:music-note", "Music fade", "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
+          ${this._renderSlider("mdi:volume-high", "Volume", "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
 
-          <div class="row">
-            <span class="label">Playlist</span>
+          <div class="field">
+            <span class="label"><ha-icon icon="mdi:playlist-music"></ha-icon>Playlist</span>
             ${playlistOptions.length
               ? html`
                   <select
+                    .value=${playlist}
                     @change=${(e: Event) =>
-                      this._updateConfig({
-                        playlist: (e.target as HTMLSelectElement).value
-                      })}
+                      this._set({ playlist: (e.target as HTMLSelectElement).value })}
                   >
                     ${playlistOptions.map(
-                      (opt) => html`
-                        <option
-                          .value=${opt}
-                          ?selected=${opt === playlist}
-                        >
-                          ${opt}
-                        </option>
-                      `
+                      (opt) => html`<option .value=${opt} ?selected=${opt === playlist}>${opt}</option>`
                     )}
                   </select>
                 `
-              : html`<span class="value">${playlist || "Default"}</span>`}
+              : html`<span class="value muted">${playlist || "No playlist configured"}</span>`}
           </div>
         </div>
 
         <div class="footer">
-          <div class="footer-block">
-            Next alarm:<br />
-            <span class="value">
-              ${this._formatNextFire(nextFire)}
-            </span>
-            ${personEntity
-              ? html`<div class="small">Person: ${personEntity}</div>`
-              : nothing}
-            ${canSnooze
-              ? html`
-                  <div class="snooze-control">
-                    <div class="snooze-header">
-                      <span class="label">Snooze delay</span>
-                      <span class="value">${snoozeMinutes} min</span>
-                    </div>
-                    <ha-slider
-                      min="5"
-                      max="60"
-                      step="5"
-                      .value=${snoozeMinutes}
-                      @input=${(e: Event) => {
-                        this._snoozeMinutes = Number(
-                          (e.target as HTMLInputElement).value
-                        );
-                      }}
-                    ></ha-slider>
-                  </div>
-                `
-              : nothing}
-            <div class="actions">
-              <button
-                class="action"
-                type="button"
-                @click=${() => this._triggerNow()}
-              >
-                Trigger now
-              </button>
-              ${canSnooze
-                ? html`
-                    <button
-                      class="action action-secondary"
-                      type="button"
-                      @click=${() => this._snooze()}
-                    >
-                      Snooze ${snoozeMinutes} min
-                    </button>
-                  `
-                : nothing}
-              ${canStop
-                ? html`
-                    <button
-                      class="action action-danger"
-                      type="button"
-                      @click=${() => this._stop()}
-                    >
-                      Stop
-                    </button>
-                  `
-                : nothing}
-            </div>
-          </div>
+          <span class="footer-note">
+            ${nextFire && !snoozed
+              ? html`<ha-icon icon="mdi:alarm-check"></ha-icon>
+                  Next: ${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)}`
+              : enabled
+                ? nothing
+                : html`<ha-icon icon="mdi:alarm-off"></ha-icon> Alarm is off`}
+          </span>
+          <button
+            class="text-button"
+            type="button"
+            ?disabled=${this._busy === "trigger_now"}
+            @click=${() => this._call("trigger_now")}
+          >
+            <ha-icon icon="mdi:play-circle-outline"></ha-icon>
+            Test now
+          </button>
         </div>
       </ha-card>
     `;
   }
 
+  private _renderSubtitle(
+    st: string,
+    nextFire: string | null,
+    snoozeUntil: string | null,
+    runStarted: string | null
+  ) {
+    switch (st) {
+      case "armed":
+        return nextFire
+          ? `${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)} · ${this._fmtRelative(nextFire)}`
+          : "No upcoming alarm";
+      case "snoozed":
+        return `Rings again at ${this._fmtTime(snoozeUntil)}`;
+      case "rising":
+        return `Started ${this._fmtTime(runStarted)}`;
+      case "ringing":
+        return `Ringing since ${this._fmtTime(runStarted)}`;
+      case "disarmed":
+        return "Alarm is off";
+      default:
+        return "";
+    }
+  }
+
+  private _renderSlider(
+    icon: string,
+    label: string,
+    key: string,
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+    display: string,
+    scale = 1
+  ) {
+    return html`
+      <div class="field slider-field">
+        <span class="label">
+          <ha-icon icon=${icon}></ha-icon>${label}
+          <span class="value">${display}</span>
+        </span>
+        <ha-slider
+          min=${min}
+          max=${max}
+          step=${step}
+          .value=${value}
+          @input=${(e: Event) => this._sliderInput(key, e)}
+          @change=${(e: Event) => this._sliderChange(key, e, scale)}
+        ></ha-slider>
+      </div>
+    `;
+  }
+
   static styles = css`
+    :host {
+      --pw-accent: var(--primary-color, #03a9f4);
+      --pw-accent-text: var(--text-primary-color, #fff);
+      --pw-danger: var(--error-color, #db4437);
+      --pw-warn: var(--warning-color, #ff9800);
+      --pw-info: var(--info-color, #4a6cf7);
+      --pw-muted: var(--secondary-text-color, #727272);
+      --pw-surface: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+      --pw-radius: var(--ha-card-border-radius, 12px);
+      --pw-ring-color: var(--pw-accent);
+    }
+
     ha-card {
       padding: 16px;
       box-sizing: border-box;
+      overflow: hidden;
     }
+    ha-card.is-ringing { --pw-ring-color: var(--pw-danger); }
+    ha-card.is-rising { --pw-ring-color: var(--pw-warn); }
+    ha-card.is-snoozed { --pw-ring-color: var(--pw-info); }
+    ha-card.is-disarmed { --pw-ring-color: var(--pw-muted); }
 
+    /* ---------- header ---------- */
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      gap: 12px;
     }
-
+    .header-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .icon-wrap {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex: none;
+      background: color-mix(in srgb, var(--pw-ring-color) 16%, transparent);
+      color: var(--pw-ring-color);
+      transition: background 300ms, color 300ms;
+    }
+    .icon-wrap ha-icon {
+      --mdc-icon-size: 24px;
+    }
+    .is-ringing .icon-wrap {
+      animation: pw-pulse 1.4s ease-in-out infinite;
+    }
+    .header-text { min-width: 0; }
     .title {
       font-size: 1.1rem;
       font-weight: 600;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-
-    .state-pill {
-      font-size: 0.8rem;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: var(--primary-color, #03a9f4);
-      color: var(--text-primary-color, #fff);
+    .subtitle {
+      font-size: 0.82rem;
+      color: var(--pw-muted);
+      margin-top: 2px;
     }
-
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px 16px;
-    }
-
-    .row {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .row.horizontal {
-      flex-direction: row;
-      justify-content: space-between;
+    .pill {
+      flex: none;
+      display: inline-flex;
       align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      color: var(--pw-ring-color);
+      background: color-mix(in srgb, var(--pw-ring-color) 14%, transparent);
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .is-ringing .dot,
+    .is-rising .dot {
+      animation: pw-blink 1s steps(2, start) infinite;
     }
 
-    .label {
-      font-size: 0.85rem;
-      color: var(--secondary-text-color);
-    }
-
-    .value {
-      font-size: 0.9rem;
-      font-weight: 500;
-    }
-
-    .footer {
+    /* ---------- hero (active alarm) ---------- */
+    .hero {
       margin-top: 16px;
-      font-size: 0.8rem;
-      color: var(--secondary-text-color);
-    }
-
-    .footer-block {
+      padding: 16px;
+      border-radius: var(--pw-radius);
       display: flex;
       flex-direction: column;
       gap: 12px;
+      color: var(--pw-ring-color);
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--pw-ring-color) 22%, transparent),
+        color-mix(in srgb, var(--pw-ring-color) 6%, transparent)
+      );
+      border: 1px solid color-mix(in srgb, var(--pw-ring-color) 30%, transparent);
     }
-
-    .time-input {
-      width: 100%;
-      box-sizing: border-box;
-    }
-
-    select,
-    input[type="time"] {
-      padding: 4px 6px;
-      font-size: 0.9rem;
-      border-radius: 4px;
-      border: 1px solid var(--divider-color);
-      background: var(--card-background-color);
-      color: var(--primary-text-color);
-    }
-
-    ha-slider {
-      width: 100%;
-    }
-
-    .actions {
+    .hero-text {
       display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .hero-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .hero-sub {
+      font-size: 0.85rem;
+      color: var(--primary-text-color);
+      opacity: 0.85;
+    }
+    .hero-sub em {
+      font-style: normal;
+      color: var(--pw-muted);
+      margin-left: 6px;
+    }
+    .stop {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: calc(var(--pw-radius) - 2px);
+      background: var(--pw-danger);
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 6px 18px color-mix(in srgb, var(--pw-danger) 35%, transparent);
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+    .stop ha-icon { --mdc-icon-size: 26px; }
+    .stop:hover { filter: brightness(1.05); }
+    .stop:active { transform: scale(0.985); }
+    .snooze-row {
+      display: flex;
+      align-items: center;
       gap: 8px;
       flex-wrap: wrap;
     }
+    .snooze-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--primary-text-color);
+      margin-right: 4px;
+    }
+    .snooze-label ha-icon { --mdc-icon-size: 18px; }
+    .preset {
+      flex: 1 1 auto;
+      min-width: 64px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--pw-ring-color) 45%, transparent);
+      background: var(--card-background-color, #fff);
+      color: var(--primary-text-color);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease;
+    }
+    .preset.primary {
+      background: var(--pw-ring-color);
+      border-color: var(--pw-ring-color);
+      color: var(--pw-accent-text);
+    }
+    .preset:hover { filter: brightness(1.05); }
+    .preset:active { transform: scale(0.97); }
+    button:disabled { opacity: 0.6; cursor: progress; }
 
-    .snooze-control {
+    /* ---------- settings ---------- */
+    .settings {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 20px;
+    }
+    .toggles {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      border-radius: calc(var(--pw-radius) - 4px);
+      background: var(--pw-surface);
+      overflow: hidden;
+    }
+    .toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .toggle + .toggle {
+      border-top: 1px solid color-mix(in srgb, var(--pw-muted) 18%, transparent);
+    }
+    .toggle > span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+    .toggle ha-icon {
+      --mdc-icon-size: 20px;
+      color: var(--pw-muted);
+    }
+    .toggle small {
+      font-size: 0.72rem;
+      color: var(--pw-muted);
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--pw-muted) 14%, transparent);
+    }
+    .toggle small.away {
+      color: var(--pw-warn);
+      background: color-mix(in srgb, var(--pw-warn) 14%, transparent);
+    }
+    .field {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      max-width: 280px;
+      min-width: 0;
     }
-
-    .snooze-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-    }
-
-    .action {
-      padding: 8px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--divider-color);
-      background: var(--primary-color);
-      color: var(--text-primary-color, #fff);
+    .label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--pw-muted);
+    }
+    .label ha-icon { --mdc-icon-size: 18px; }
+    .label .value {
+      margin-left: auto;
+      color: var(--primary-text-color);
       font-weight: 600;
-      cursor: pointer;
-      transition: opacity 120ms ease, transform 120ms ease;
+      font-variant-numeric: tabular-nums;
     }
-
-    .action:hover {
-      opacity: 0.92;
-    }
-
-    .action:active {
-      transform: translateY(1px);
-    }
-
-    .action-secondary {
-      background: transparent;
+    .value.muted { color: var(--pw-muted); font-weight: 400; }
+    .time-input,
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      font-size: 1rem;
+      font-family: inherit;
+      border-radius: 8px;
+      border: 1px solid var(--divider-color, rgba(127,127,127,0.3));
+      background: var(--card-background-color, #fff);
       color: var(--primary-text-color);
     }
+    .time-input {
+      font-size: 1.25rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .weekdays {
+      display: flex;
+      gap: 4px;
+    }
+    .day {
+      flex: 1;
+      padding: 7px 0;
+      border-radius: 8px;
+      border: 1px solid var(--divider-color, rgba(127,127,127,0.3));
+      background: transparent;
+      color: var(--pw-muted);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 120ms, color 120ms;
+    }
+    .day.on {
+      background: var(--pw-accent);
+      border-color: var(--pw-accent);
+      color: var(--pw-accent-text);
+    }
+    .slider-field ha-slider {
+      width: 100%;
+      margin: 0 -4px;
+    }
 
-    .action-danger {
-      background: var(--error-color, #db4437);
-      color: var(--text-primary-color, #fff);
+    /* ---------- footer ---------- */
+    .footer {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid var(--divider-color, rgba(127,127,127,0.2));
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--pw-muted);
+    }
+    .footer-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .footer ha-icon { --mdc-icon-size: 18px; }
+    .text-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: var(--pw-accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .text-button:hover {
+      background: color-mix(in srgb, var(--pw-accent) 10%, transparent);
     }
 
     .error {
-      color: var(--error-color, red);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--pw-danger);
     }
 
-    .small {
-      font-size: 0.75rem;
+    @keyframes pw-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--pw-ring-color) 45%, transparent); }
+      50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--pw-ring-color) 0%, transparent); }
+    }
+    @keyframes pw-blink {
+      to { opacity: 0.25; }
     }
 
-    @media (max-width: 600px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
+    @media (max-width: 480px) {
+      .settings { grid-template-columns: 1fr; }
     }
   `;
 }
 
-// Register for the card picker
 declare global {
   interface Window {
     customCards: Array<{
       type: string;
       name: string;
       description: string;
+      preview?: boolean;
     }>;
   }
 }
@@ -530,5 +870,6 @@ window.customCards.push({
   type: "lovelace-personal-wakeup-card",
   name: "Personal Wakeup Card",
   description:
-    "Control a Personal Wakeup alarm entity (time, fade, volume, playlist, require_home)."
+    "Control a Personal Wakeup alarm: time, weekdays, fades, volume, playlist, snooze and stop.",
+  preview: true
 });

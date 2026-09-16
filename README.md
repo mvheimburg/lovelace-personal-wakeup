@@ -1,26 +1,47 @@
 # Lovelace Personal Wakeup Card
 
-Lovelace card for controlling the `personal_wakeup` integration entity.
+A dashboard card for the
+[Personal Wakeup](https://github.com/mvheimburg/personal_wakeup_hacs)
+integration.
 
-The card surfaces `Trigger now`, `Snooze`, and `Stop` actions when the alarm is active.
+- Big **Stop** button and one-tap **Snooze** presets while the alarm is
+  rising, ringing or snoozed.
+- Alarm time, weekday repeat, skip-next, light fade, music fade, volume and
+  playlist, all editable in place.
+- Enabled / only-when-home switches, next alarm countdown, a "Test now" button.
+- Failed service calls show a Home Assistant toast instead of failing silently.
 
-## Build
-```bash
-npm ci
-npm run build
-```
+## Install
 
-Output bundle:
-- `dist/lovelace-personal-wakeup-card.js`
+### HACS
+Add this repository as a custom repository (category *Dashboard*) and install
+**Personal Wakeup Card**. HACS registers the resource for you.
 
-## Install in Home Assistant
-1. Copy `dist/lovelace-personal-wakeup-card.js` into your Home Assistant `www` folder.
-2. Add a Lovelace resource pointing to that file.
-3. Add card type: `custom:lovelace-personal-wakeup-card`.
+### Manual
+1. Copy `dist/lovelace-personal-wakeup-card.js` to `config/www/`.
+2. Add `/local/lovelace-personal-wakeup-card.js` as a *JavaScript module*
+   resource under **Settings → Dashboards → Resources**.
 
 ## Card config
+
 ```yaml
 type: custom:lovelace-personal-wakeup-card
-entity: sensor.your_wakeup_sensor
-name: Wakeup (optional)
+entity: sensor.matilde_wakeup
+name: Matilde           # optional, defaults to the entity's friendly name
+snooze_presets: [5, 10, 15]   # optional, minutes; the entity's default snooze is always included
 ```
+
+The visual editor offers the same options.
+
+## Build
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm run build      # writes dist/lovelace-personal-wakeup-card.js
+```
+
+CI checks that `dist/` is committed up to date. Releases are automatic: bump
+`version` in `package.json`, merge to `main`, and the release workflow tags
+`v<version>` and attaches the built card to a GitHub release.

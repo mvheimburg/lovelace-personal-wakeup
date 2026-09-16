@@ -1,11 +1,12 @@
 {
   "name": "lovelace-personal-wakeup-card",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lovelace card for the Personal Wakeup alarm integration",
   "scripts": {
     "build": "rollup -c",
     "build:watch": "rollup -c -w",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.8",

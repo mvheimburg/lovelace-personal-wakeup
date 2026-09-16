@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Lint, type-check and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit -p tsconfig.json
+      - run: npm run build
+      - name: dist/ must be committed up to date
+        run: |
+          if ! git diff --quiet -- dist/lovelace-personal-wakeup-card.js; then
+            echo "::error::dist/lovelace-personal-wakeup-card.js is out of date. Run 'npm run build' and commit the result."
+            git --no-pager diff --stat -- dist/
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lovelace-personal-wakeup-card
+          path: dist/lovelace-personal-wakeup-card.js
+
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: plugin

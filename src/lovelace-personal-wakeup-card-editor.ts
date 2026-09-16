@@ -9,7 +9,27 @@ interface PersonalWakeupCardConfig {
   type: string;
   entity: string;
   name?: string;
+  snooze_presets?: number[];
 }
+
+const SCHEMA = [
+  {
+    name: "entity",
+    required: true,
+    selector: { entity: { integration: "personal_wakeup", domain: "sensor" } }
+  },
+  { name: "name", selector: { text: {} } },
+  {
+    name: "snooze_presets",
+    selector: { text: {} }
+  }
+];
+
+const LABELS: Record<string, string> = {
+  entity: "Wakeup alarm entity",
+  name: "Name (optional)",
+  snooze_presets: "Snooze presets in minutes (optional, e.g. 5, 10, 15)"
+};
 
 @customElement("lovelace-personal-wakeup-card-editor")
 export class PersonalWakeupCardEditor extends LitElement {
@@ -20,104 +40,62 @@ export class PersonalWakeupCardEditor extends LitElement {
     this._config = { ...config };
   }
 
-  private _valueChanged(ev: Event): void {
+  private _valueChanged(ev: CustomEvent): void {
+    ev.stopPropagation();
     if (!this._config) return;
-    const target = ev.target as HTMLInputElement;
-    const field = target.dataset.configValue;
-    if (!field) return;
+    const value = { ...(ev.detail.value as Record<string, unknown>) };
 
-    const newConfig = { ...this._config };
+    // The form edits presets as text; store them as a clean number list.
+    const rawPresets = value.snooze_presets;
+    if (typeof rawPresets === "string") {
+      const nums = rawPresets
+        .split(/[\s,]+/)
+        .map((s) => Number(s))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      if (nums.length) value.snooze_presets = nums;
+      else delete value.snooze_presets;
+    }
+    if (value.name === "") delete value.name;
 
-    if (target.value === "" && field !== "entity") {
-      delete (newConfig as any)[field];
-    } else {
-      (newConfig as any)[field] = target.value;
+    const newConfig = { ...this._config, ...value } as PersonalWakeupCardConfig;
+    for (const key of ["name", "snooze_presets"] as const) {
+      if (!(key in value)) delete newConfig[key];
     }
 
-    const event = new CustomEvent("config-changed", {
-      detail: { config: newConfig },
-      bubbles: true,
-      composed: true
-    });
-    this.dispatchEvent(event);
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: newConfig },
+        bubbles: true,
+        composed: true
+      })
+    );
   }
 
   protected render() {
-    if (!this.hass || !this._config) {
-      return html``;
-    }
+    if (!this.hass || !this._config) return html``;
 
-    const entity = this._config.entity || "";
-    const name = this._config.name || "";
-
-    const entities = Object.entries(this.hass.states)
-      .filter(([eid, state]) => {
-        if (!eid.startsWith("sensor.")) return false;
-        const attrs = state?.attributes ?? {};
-        return "time_of_day" in attrs && "fade_duration" in attrs;
-      })
-      .map(([eid]) => eid);
+    const data = {
+      ...this._config,
+      snooze_presets: Array.isArray(this._config.snooze_presets)
+        ? this._config.snooze_presets.join(", ")
+        : this._config.snooze_presets ?? ""
+    };
 
     return html`
-      <div class="form">
-        <div class="row">
-          <label>Entity</label>
-          <select
-            .value=${entity}
-            data-config-value="entity"
-            @change=${this._valueChanged}
-          >
-            <option value="">-- Select wakeup alarm entity --</option>
-            ${entities.map(
-              (eid) => html`
-                <option value=${eid} ?selected=${eid === entity}>
-                  ${eid}
-                </option>
-              `
-            )}
-          </select>
-        </div>
-
-        <div class="row">
-          <label>Name (optional)</label>
-          <input
-            type="text"
-            .value=${name}
-            data-config-value="name"
-            @input=${this._valueChanged}
-          />
-        </div>
-      </div>
+      <ha-form
+        .hass=${this.hass}
+        .data=${data}
+        .schema=${SCHEMA}
+        .computeLabel=${(s: { name: string }) => LABELS[s.name] ?? s.name}
+        @value-changed=${this._valueChanged}
+      ></ha-form>
     `;
   }
 
   static styles = css`
-    .form {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding: 8px;
-    }
-
-    .row {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    label {
-      font-size: 0.9rem;
-      color: var(--secondary-text-color);
-    }
-
-    select,
-    input[type="text"] {
-      padding: 4px 6px;
-      font-size: 0.9rem;
-      border-radius: 4px;
-      border: 1px solid var(--divider-color);
-      background: var(--card-background-color);
-      color: var(--primary-text-color);
+    ha-form {
+      display: block;
+      padding: 8px 0;
     }
   `;
 }
