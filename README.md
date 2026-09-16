@@ -1,7 +1,7 @@
 # Lovelace Personal Wakeup Card
 
 A dashboard card for the
-[Personal Wakeup](https://github.com/mvheimburg/personal_wakeup_hacs)
+[Personal Wakeup](https://github.com/mvheimburg/personal-wakeup)
 integration.
 
 ![The card armed and ringing](images/screenshot.png)
