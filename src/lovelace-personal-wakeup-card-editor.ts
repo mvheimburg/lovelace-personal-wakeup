@@ -9,10 +9,23 @@ interface PersonalWakeupCardConfig {
   type: string;
   entity: string;
   name?: string;
+  appearance?: "default" | "bubble";
   snooze_presets?: number[];
 }
 
 const SCHEMA = [
+  {
+    name: "appearance",
+    selector: {
+      select: {
+        mode: "dropdown",
+        options: [
+          { value: "default", label: "Default" },
+          { value: "bubble", label: "Bubble" }
+        ]
+      }
+    }
+  },
   {
     name: "entity",
     required: true,
@@ -26,6 +39,7 @@ const SCHEMA = [
 ];
 
 const LABELS: Record<string, string> = {
+  appearance: "Appearance",
   entity: "Wakeup alarm entity",
   name: "Name (optional)",
   snooze_presets: "Snooze presets in minutes (optional, e.g. 5, 10, 15)"
@@ -37,7 +51,7 @@ export class PersonalWakeupCardEditor extends LitElement {
   @state() private _config!: PersonalWakeupCardConfig;
 
   public setConfig(config: PersonalWakeupCardConfig): void {
-    this._config = { ...config };
+    this._config = { appearance: "default", ...config };
   }
 
   private _valueChanged(ev: CustomEvent): void {
