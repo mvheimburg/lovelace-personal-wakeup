@@ -92,8 +92,14 @@ export class PersonalWakeupCard extends LitElement {
   protected willUpdate(): void {
     if (!this._savedDraft) return;
     const a = this._entity()?.attributes ?? {};
-    const acknowledged = Object.entries(this._savedDraft).every(([key, value]) =>
-      sameSetting(a[key === "ma_player_entity" ? "player_entity" : key], value));
+    const acknowledged = Object.entries(this._savedDraft).every(([key, value]) => {
+      const reported = a[key === "ma_player_entity" ? "player_entity" : key];
+      // HA reports cleared optional targets as null; selectors submit "".
+      if ((key === "light_entity" || key === "ma_player_entity") && value === "") {
+        return reported === null || reported === "";
+      }
+      return sameSetting(reported, value);
+    });
     if (acknowledged) {
       const remaining = { ...this._settingsDraft };
       for (const [key, value] of Object.entries(this._savedDraft)) {

@@ -376,3 +376,77 @@ it("acknowledges day mappings regardless of backend key order", async () => {
     (root.querySelector('[data-day-time="mon"]') as HTMLInputElement).value,
   ).toBe("10:00");
 });
+
+it("acknowledges a cleared inactive target reported as null and follows later target updates", async () => {
+  const { card, root, calls } = await mount();
+  await change(
+    card,
+    root.querySelector('ha-selector[data-key="light_entity"]'),
+    undefined,
+    true,
+  );
+  await change(card, root.querySelector('[aria-label="Wake mode"]'), "music");
+  await change(
+    card,
+    root.querySelector('ha-selector[data-key="ma_player_entity"]'),
+    "media_player.bed",
+    true,
+  );
+  root.querySelector<HTMLButtonElement>("[data-save]")!.click();
+  await card.updateComplete;
+  await card.updateComplete;
+  expect(calls).toEqual([
+    [
+      "personal_wakeup",
+      "set_config",
+      {
+        entity_id: "sensor.alarm",
+        light_entity: "",
+        wake_mode: "music",
+        ma_player_entity: "media_player.bed",
+      },
+    ],
+  ]);
+  card.hass = {
+    ...card.hass,
+    states: {
+      ...card.hass.states,
+      "sensor.alarm": {
+        ...card.hass.states["sensor.alarm"],
+        attributes: {
+          ...base,
+          light_entity: null,
+          wake_mode: "music",
+          player_entity: "media_player.bed",
+        },
+      },
+    },
+  };
+  await card.updateComplete;
+  card.hass = {
+    ...card.hass,
+    states: {
+      ...card.hass.states,
+      "sensor.alarm": {
+        ...card.hass.states["sensor.alarm"],
+        attributes: {
+          ...base,
+          light_entity: "light.new",
+          wake_mode: "both",
+          player_entity: "media_player.new",
+        },
+      },
+    },
+  };
+  await card.updateComplete;
+  expect(
+    (root.querySelector('[aria-label="Wake mode"]') as HTMLSelectElement).value,
+  ).toBe("both");
+  expect(
+    (root.querySelector('ha-selector[data-key="light_entity"]') as any).value,
+  ).toBe("light.new");
+  expect(
+    (root.querySelector('ha-selector[data-key="ma_player_entity"]') as any)
+      .value,
+  ).toBe("media_player.new");
+});
