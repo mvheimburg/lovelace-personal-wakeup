@@ -10,8 +10,8 @@ integration.
   rising, ringing or snoozed.
 - Compact main card with status, next alarm countdown, Enabled and Skip next.
 - Gear button opens settings for alarm time, weekdays, fades, volume, playlist,
-  presence checking, and **Test now**. Changes apply immediately.
-- Select the wakeup light, music player, and optional person in the modal.
+  presence checking, and **Test now**.
+- Select the wakeup light, music player, and optional people in the modal.
   These selections persist in the integration options. Changing a selection
   stops an active alarm or snooze before applying it.
 - Close settings with the close button, Escape, or a click outside the modal.
@@ -21,6 +21,32 @@ On a phone the card stacks into a single column, with the Stop button and the
 snooze presets sized for a half-asleep thumb:
 
 <img src="images/ringing-phone.png" alt="The card ringing at phone width" width="320">
+
+## Wakeup configuration (0.4.0)
+
+New controls require **Personal Wakeup integration 0.4.0 or later**. An older
+integration keeps its existing controls and shows an upgrade notice.
+
+- Choose **Lights only**, **Music only**, or **Lights and music**. Only enabled
+  channels show their target selectors, fades, volume and playlist controls.
+  Select any missing target, then press **Save configuration** to apply the mode
+  and targets together. Changing these settings stops an active alarm.
+- Select multiple people. **Only when home** allows scheduled alarms when any
+  selected person is home; unavailable/unknown people do not count as home.
+  Clearing the selection removes presence restrictions. Test now and snooze
+  remain manual actions and bypass presence checking.
+- Each of the seven weekday rows has an enabled button and a time. **Default**
+  inherits Alarm time; editing a day's time creates an override. **Reset** removes
+  that override. Disabled days retain their times. At least one day must remain
+  selected; turn off **Enabled** to suspend all alarms.
+- Mode, targets, people, enabled weekdays and daily overrides are staged until
+  **Save configuration**. Closing the dialog retains drafts; **Discard changes**
+  restores reported settings. Errors retain the draft and appear in the dialog
+  and a Home Assistant toast. Other controls apply immediately.
+
+The card uses the alarm sensor's friendly name unless `name` is explicitly set
+in the card configuration. Integration 0.4.0 names new sensors after their alarm
+entry; existing entity IDs and manually customized names remain stable.
 
 ## Install
 
@@ -73,6 +99,8 @@ a visual preset, not support for Bubble Card modules or its pop-up engine.
 
 ```bash
 npm ci
+npx playwright install chromium
+npm test          # real card DOM and service payloads in Chromium
 npm run lint
 npm run typecheck
 npm run build      # writes dist/lovelace-personal-wakeup-card.js

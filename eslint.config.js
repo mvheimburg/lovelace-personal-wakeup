@@ -6,7 +6,7 @@ module.exports = tseslint.config(
   },
   ...tseslint.configs.recommended,
   {
-    files: ["src/**/*.ts"],
+    files: ["src/**/*.ts", "tests/**/*.ts"],
     languageOptions: {
       globals: {
         window: "readonly",

@@ -195,6 +195,15 @@ const WEEKDAY_LABELS = {
     sat: "Sa",
     sun: "Su"
 };
+// Service settings contain scalars, arrays and the weekday/time mapping.
+function sameSetting(left, right) {
+    if (left && right && typeof left === "object" && typeof right === "object") {
+        const a = Object.entries(left).sort(([x], [y]) => x.localeCompare(y));
+        const b = Object.entries(right).sort(([x], [y]) => x.localeCompare(y));
+        return JSON.stringify(a) === JSON.stringify(b);
+    }
+    return left === right;
+}
 const DEFAULT_SNOOZE_PRESETS = [5, 10, 15];
 const STATE_LABELS = {
     disarmed: "Off",
@@ -218,10 +227,59 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         /** Live slider values while dragging, keyed by attribute name. */
         this._draft = {};
         this._busy = null;
+        this._settingsDraft = {};
+        this._settingsError = "";
+        this._savedDraft = null;
+    }
+    _advanced() {
+        const a = this._entity()?.attributes ?? {};
+        return "wake_mode" in a && "person_entities" in a && "day_times" in a;
+    }
+    _stage(partial) {
+        this._settingsDraft = { ...this._settingsDraft, ...partial };
+        this._settingsError = "";
+    }
+    willUpdate() {
+        if (!this._savedDraft)
+            return;
+        const a = this._entity()?.attributes ?? {};
+        const acknowledged = Object.entries(this._savedDraft).every(([key, value]) => sameSetting(a[key === "ma_player_entity" ? "player_entity" : key], value));
+        if (acknowledged) {
+            const remaining = { ...this._settingsDraft };
+            for (const [key, value] of Object.entries(this._savedDraft)) {
+                if (sameSetting(remaining[key], value))
+                    delete remaining[key];
+            }
+            this._settingsDraft = remaining;
+            this._savedDraft = null;
+        }
+    }
+    async _saveSettings() {
+        if (this._busy || !this._advanced())
+            return;
+        const partial = { ...this._settingsDraft };
+        const a = this._entity()?.attributes ?? {};
+        const mode = partial.wake_mode ?? a.wake_mode;
+        if ((mode !== "music" && !(partial.light_entity ?? a.light_entity)) ||
+            (mode !== "lights" && !(partial.ma_player_entity ?? a.player_entity))) {
+            this._settingsError = "Choose a target for each enabled channel.";
+            return;
+        }
+        this._settingsError = "";
+        if (await this._call("set_config", partial)) {
+            this._savedDraft = partial;
+            this.requestUpdate();
+        }
     }
     setConfig(config) {
         if (!config.entity) {
             throw new Error("You must define an entity for lovelace-personal-wakeup-card");
+        }
+        if (this._config?.entity !== config.entity) {
+            this._settingsDraft = {};
+            this._savedDraft = null;
+            this._settingsError = "";
+            this._draft = {};
         }
         this._config = config;
         this.setAttribute("data-appearance", config.appearance === "bubble" ? "bubble" : "default");
@@ -315,10 +373,13 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
                 entity_id: this._config.entity,
                 ...data
             });
+            return true;
         }
         catch (err) {
             const msg = err?.message || err?.error || String(err);
+            this._settingsError = String(msg);
             this._toast(`Wakeup alarm: ${service} failed (${msg})`);
+            return false;
         }
         finally {
             this._busy = null;
@@ -339,7 +400,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
     }
     async _sliderChange(key, ev, scale = 1) {
         const value = Number(ev.target.value);
-        await this._set({ [key]: value * scale });
+        if (!await this._set({ [key]: value * scale }))
+            return;
         const draft = { ...this._draft };
         delete draft[key];
         this._draft = draft;
@@ -349,10 +411,14 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             ? current.filter((d) => d !== day)
             : [...current, day];
         if (!next.length) {
-            this._toast("At least one weekday must stay selected");
+            this._toast("At least one weekday must stay selected. Use Enabled to turn the alarm off.");
             return;
         }
-        this._set({ weekdays: WEEKDAYS.filter((d) => next.includes(d)) });
+        const partial = { weekdays: WEEKDAYS.filter((d) => next.includes(d)) };
+        if (this._advanced())
+            this._stage(partial);
+        else
+            void this._set(partial);
     }
     // ---------------------------------------------------------------- render
     render() {
@@ -367,7 +433,13 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         </ha-card>
       `;
         }
-        const a = stateObj.attributes;
+        const live = stateObj.attributes;
+        const a = { ...live, ...this._settingsDraft };
+        const advanced = this._advanced();
+        const mode = a.wake_mode ?? "both";
+        const lights = mode !== "music";
+        const music = mode !== "lights";
+        const dayTimes = a.day_times ?? {};
         const st = stateObj.state;
         const active = st === "rising" || st === "ringing";
         const snoozed = st === "snoozed";
@@ -377,7 +449,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const requireHome = Boolean(a.require_home);
         const skipNext = Boolean(a.skip_next);
         const timeOfDay = this._normalizeTime(a.time_of_day);
-        const weekdays = Array.isArray(a.weekdays) ? a.weekdays : [...WEEKDAYS];
+        const weekdays = Array.isArray(a.weekdays) && a.weekdays.length ? a.weekdays : [...WEEKDAYS];
         const fadeMin = this._draft.fade_duration ?? Math.round(Number(a.fade_duration ?? 900) / 60);
         const musicMin = this._draft.fade_music_duration ??
             Math.round(Number(a.fade_music_duration ?? 300) / 60);
@@ -391,7 +463,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const snoozeUntil = a.snooze_until ?? null;
         const runStarted = a.run_started ?? null;
         const personEntity = a.person_entity ?? null;
-        const personState = personEntity ? this.hass.states[personEntity]?.state : undefined;
+        const people = Array.isArray(a.person_entities) ? a.person_entities : personEntity ? [personEntity] : [];
+        const anyoneHome = people.some((person) => this.hass.states[person]?.state === "home");
         const defaultSnooze = Number(a.snooze_minutes ?? 10);
         const presets = Array.from(new Set([...(this._config.snooze_presets ?? DEFAULT_SNOOZE_PRESETS), defaultSnooze])).sort((x, y) => x - y);
         const title = this._config.name || a.friendly_name || "Wakeup alarm";
@@ -425,7 +498,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
                           <em>${this._fmtRelative(snoozeUntil)}</em></span>`
                 : st === "rising"
                     ? x `<span class="hero-title">Waking up</span>
-                          <span class="hero-sub">Light and music fading in since
+                          <span class="hero-sub">${live.wake_mode === "lights" ? "Light" : live.wake_mode === "music" ? "Music" : "Light and music"} fading in since
                             ${this._fmtTime(runStarted)}</span>`
                     : x `<span class="hero-title">Ringing</span>
                           <span class="hero-sub">Since ${this._fmtTime(runStarted)}</span>`}
@@ -509,6 +582,15 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
           </button>
         </div>
         <div class="settings">
+          ${advanced ? x `<div class="field device-field">
+            <label class="label" for="wake-mode">Wake mode</label>
+            <select id="wake-mode" aria-label="Wake mode" .value=${mode}
+              @change=${(e) => this._stage({ wake_mode: e.target.value })}>
+              <option value="lights" ?selected=${mode === "lights"}>Lights only</option>
+              <option value="music" ?selected=${mode === "music"}>Music only</option>
+              <option value="both" ?selected=${mode === "both"}>Lights and music</option>
+            </select>
+          </div>` : x `<p class="device-field">Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.</p>`}
           <div class="field time-field">
             <span class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>Alarm time</span>
             <input
@@ -522,9 +604,11 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
 
           <div class="field">
             <span class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>Repeat</span>
-            <div class="weekdays">
+            <div class=${advanced ? "daily-times" : "weekdays"}>
               ${WEEKDAYS.map((d) => x `
+                  <div class="day-row">
                   <button
+                    data-day=${d}
                     type="button"
                     class=${e({ day: true, on: weekdays.includes(d) })}
                     aria-pressed=${weekdays.includes(d)}
@@ -532,12 +616,26 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
                   >
                     ${WEEKDAY_LABELS[d]}
                   </button>
+                  ${advanced ? x `<input class="time-input" type="time" data-day-time=${d}
+                    aria-label=${`${d} alarm time`} .value=${dayTimes[d] ?? timeOfDay}
+                    @change=${(e) => {
+            const value = e.target.value;
+            if (value)
+                this._stage({ day_times: { ...dayTimes, [d]: value } });
+        }} />
+                    <button type="button" class="text-button" aria-label=${`Use default time for ${d}`}
+                      ?disabled=${!(d in dayTimes)} @click=${() => {
+            const next = { ...dayTimes };
+            delete next[d];
+            this._stage({ day_times: next });
+        }}>${d in dayTimes ? "Reset" : "Default"}</button>` : E}
+                  </div>
                 `)}
             </div>
           </div>
 
-          ${this._renderSlider("mdi:weather-sunset-up", "Light fade", "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60)}
-          ${this._renderSlider("mdi:music-note", "Music fade", "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
+          ${lights ? this._renderSlider("mdi:weather-sunset-up", "Light fade", "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : E}
+          ${music ? x `${this._renderSlider("mdi:music-note", "Music fade", "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
           ${this._renderSlider("mdi:volume-high", "Volume", "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
 
           <div class="field">
@@ -554,26 +652,37 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
                 `
             : x `<span class="value muted">${playlist || "No playlist configured"}</span>`}
           </div>
-          ${this._renderEntitySelector("light_entity", "Wakeup light", "light", a.light_entity)}
-          ${this._renderEntitySelector("ma_player_entity", "Music player", "media_player", a.player_entity)}
-          ${this._renderEntitySelector("person_entity", "Person", "person", personEntity)}
+          ` : E}
+          ${lights ? this._renderEntitySelector("light_entity", "Wakeup light", "light", a.light_entity) : E}
+          ${music ? this._renderEntitySelector("ma_player_entity", "Music player", "media_player", a.ma_player_entity ?? a.player_entity) : E}
+          ${this._renderEntitySelector(advanced ? "person_entities" : "person_entity", advanced ? "People (anyone home)" : "Person", "person", advanced ? people : personEntity)}
           <div class="toggles">
             <label class="toggle">
               <span>
                 <ha-icon icon="mdi:home-account"></ha-icon>Only when home
-                ${personEntity
-            ? x `<small class=${e({ away: personState !== "home" })}>
-                      ${personState === "home" ? "home" : personState ?? "unknown"}
+                ${people.length
+            ? x `<small class=${e({ away: !anyoneHome })}>
+                      ${anyoneHome ? "Someone home" : "Nobody home"}
                     </small>`
             : E}
               </span>
-              <ha-switch .checked=${requireHome} ?disabled=${!personEntity}
+              <ha-switch .checked=${requireHome} ?disabled=${!people.length}
                 @change=${(e) => this._set({ require_home: e.target.checked })}
               ></ha-switch>
             </label>
           </div>
         </div>
 
+        ${this._settingsError ? x `<p role="alert" class="error">${this._settingsError}</p>` : E}
+        ${advanced ? x `<div class="save-row">
+          <span class="value muted">Mode, targets, people and daily schedule save together.</span>
+          <button class="text-button" data-discard type="button"
+            ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
+            @click=${() => { this._settingsDraft = {}; this._savedDraft = null; this._settingsError = ""; }}>Discard changes</button>
+          <button class="text-button" data-save type="button"
+            ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
+            @click=${this._saveSettings}>Save configuration</button>
+        </div>` : E}
         <div class="footer">
           <span class="footer-note">
             ${nextFire && !snoozed
@@ -625,6 +734,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
           <span class="value">${display}</span>
         </span>
         <ha-slider
+          aria-label=${label}
           min=${min}
           max=${max}
           step=${step}
@@ -639,15 +749,23 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         return x `
       <div class="field device-field">
         <ha-selector
+          data-key=${key}
           .hass=${this.hass}
-          .selector=${{ entity: { domain } }}
+          .selector=${{ entity: { domain, ...(key === "person_entities" ? { multiple: true } : {}) } }}
           .value=${value || undefined}
           .label=${label}
-          .required=${key !== "person_entity"}
+          .required=${domain !== "person"}
           .disabled=${this._busy !== null}
           @value-changed=${(ev) => {
             ev.stopPropagation();
-            const selected = ev.detail.value ?? "";
+            const selected = ev.detail.value ?? (key === "person_entities" ? [] : "");
+            if (this._advanced()) {
+                if (key === "person_entities" && Array.isArray(selected))
+                    this._stage({ [key]: [...new Set(selected)] });
+                else if (typeof selected === "string")
+                    this._stage({ [key]: selected });
+                return;
+            }
             if (typeof selected === "string" && (selected || key === "person_entity")) {
                 void this._set({ [key]: selected });
             }
@@ -965,6 +1083,12 @@ PersonalWakeupCard.styles = i$4 `
       font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
+    .save-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-size: 0.8rem; }
+    .daily-times { display: grid; gap: 6px; }
+    .day-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .daily-times .day { flex: 0 0 38px; }
+    .daily-times .time-input { min-width: 0; font-size: 1rem; }
+    .weekdays .day-row { flex: 1; }
     .weekdays {
       display: flex;
       gap: 4px;
@@ -1110,6 +1234,12 @@ __decorate([
 __decorate([
     r()
 ], PersonalWakeupCard.prototype, "_busy", void 0);
+__decorate([
+    r()
+], PersonalWakeupCard.prototype, "_settingsDraft", void 0);
+__decorate([
+    r()
+], PersonalWakeupCard.prototype, "_settingsError", void 0);
 PersonalWakeupCard = __decorate([
     t$1("lovelace-personal-wakeup-card")
 ], PersonalWakeupCard);

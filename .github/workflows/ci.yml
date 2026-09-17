@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Lint, type-check and build
+    name: Browser tests, lint, type-check and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +20,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
       - run: npm run lint
       - run: npx tsc --noEmit -p tsconfig.json
       - run: npm run build
