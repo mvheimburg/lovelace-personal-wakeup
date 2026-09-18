@@ -27,6 +27,173 @@ typeof SuppressedError === "function" ? SuppressedError : function (error, suppr
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 };
 
+function language(hass) {
+    const code = (hass?.language || hass?.locale?.language || "en")
+        .toLowerCase()
+        .replace(/_/g, "-")
+        .split("-")[0];
+    return ["nb", "no", "nn"].includes(code) ? "nb" : "en";
+}
+const en = {
+    "Snooze presets in minutes (optional, e.g. 5, 10, 15)": "Snooze presets in minutes (optional, e.g. 5, 10, 15)",
+    "Wakeup alarm entity": "Wakeup alarm entity",
+    "Name (optional)": "Name (optional)",
+    Appearance: "Appearance",
+    Default: "Default",
+    Bubble: "Bubble",
+    "Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.": "Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.",
+    "At least one weekday must stay selected. Use Enabled to turn the alarm off.": "At least one weekday must stay selected. Use Enabled to turn the alarm off.",
+    "Mode, targets, people and daily schedule save together.": "Mode, targets, people and daily schedule save together.",
+    "Choose a target for each enabled channel.": "Choose a target for each enabled channel.",
+    "No playlist configured": "No playlist configured",
+    "People (anyone home)": "People (anyone home)",
+    "Save configuration": "Save configuration",
+    "No upcoming alarm": "No upcoming alarm",
+    "Lights and music": "Lights and music",
+    "Discard changes": "Discard changes",
+    "Light and music": "Light and music",
+    "Close settings": "Close settings",
+    "Only when home": "Only when home",
+    "Rings again at": "Rings again at",
+    "Wakeup alarm": "Wakeup alarm",
+    "Wakeup light": "Wakeup light",
+    "Music player": "Music player",
+    "Someone home": "Someone home",
+    "Alarm is off": "Alarm is off",
+    "Lights only": "Lights only",
+    "Nobody home": "Nobody home",
+    "Music only": "Music only",
+    "Alarm time": "Alarm time",
+    "Light fade": "Light fade",
+    "Music fade": "Music fade",
+    Configure: "Configure",
+    "Skip next": "Skip next",
+    "(not set)": "(not set)",
+    "Waking up": "Waking up",
+    "Wake mode": "Wake mode",
+    "Test now": "Test now",
+    Tomorrow: "Tomorrow",
+    settings: "settings",
+    Playlist: "Playlist",
+    Enabled: "Enabled",
+    Ringing: "Ringing",
+    Snoozed: "Snoozed",
+    Snooze: "Snooze",
+    Repeat: "Repeat",
+    Volume: "Volume",
+    Person: "Person",
+    Today: "Today",
+    "Next:": "Next:",
+    Reset: "Reset",
+    Since: "Since",
+    Light: "Light",
+    Music: "Music",
+    Stop: "Stop",
+    Started: "Started",
+    "Ringing since": "Ringing since",
+    h: "h",
+    in: "in",
+    ago: "ago",
+    "Entity not found": "Entity not found",
+    "Define an entity": "Define an entity",
+    Time: "Time",
+    "Use default time for": "Use default time for",
+    "Action failed": "Action failed",
+    "fading in since": "fading in since",
+    Mo: "Mo",
+    Tu: "Tu",
+    We: "We",
+    Th: "Th",
+    Fr: "Fr",
+    Sa: "Sa",
+    Su: "Su",
+    Off: "Off",
+    Armed: "Armed",
+    Unavailable: "Unavailable",
+    Unknown: "Unknown",
+};
+const nb = {
+    "Snooze presets in minutes (optional, e.g. 5, 10, 15)": "Slumrevalg i minutter (valgfritt, f.eks. 5, 10, 15)",
+    "Wakeup alarm entity": "Vekkerklokkeenhet",
+    "Name (optional)": "Navn (valgfritt)",
+    Appearance: "Utseende",
+    Default: "Standard",
+    Bubble: "Boble",
+    "Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.": "Flere personer, vekkemoduser og daglige tider krever Personal Wakeup-integrasjonen 0.4.0.",
+    "At least one weekday must stay selected. Use Enabled to turn the alarm off.": "Minst én ukedag må være valgt. Bruk Aktivert for å slå av vekking.",
+    "Mode, targets, people and daily schedule save together.": "Modus, enheter, personer og ukeplan lagres samlet.",
+    "Choose a target for each enabled channel.": "Velg en enhet for hver aktivert kanal.",
+    "No playlist configured": "Ingen spilleliste konfigurert",
+    "People (anyone home)": "Personer (minst én hjemme)",
+    "Save configuration": "Lagre innstillinger",
+    "No upcoming alarm": "Ingen kommende vekking",
+    "Lights and music": "Lys og musikk",
+    "Discard changes": "Forkast endringer",
+    "Light and music": "Lys og musikk",
+    "Close settings": "Lukk innstillinger",
+    "Only when home": "Bare når noen er hjemme",
+    "Rings again at": "Ringer igjen kl.",
+    "Wakeup alarm": "Vekkerklokke",
+    "Wakeup light": "Vekkelys",
+    "Music player": "Musikkspiller",
+    "Someone home": "Noen er hjemme",
+    "Alarm is off": "Vekking er slått av",
+    "Lights only": "Bare lys",
+    "Nobody home": "Ingen hjemme",
+    "Music only": "Bare musikk",
+    "Alarm time": "Vekketid",
+    "Light fade": "Opptrapping av lys",
+    "Music fade": "Opptrapping av musikk",
+    Configure: "Konfigurer",
+    "Skip next": "Hopp over neste",
+    "(not set)": "(ikke angitt)",
+    "Waking up": "Vekking pågår",
+    "Wake mode": "Vekkemodus",
+    "Test now": "Test nå",
+    Tomorrow: "I morgen",
+    settings: "innstillinger",
+    Playlist: "Spilleliste",
+    Enabled: "Aktivert",
+    Ringing: "Ringer",
+    Snoozed: "Slumrer",
+    Snooze: "Slumre",
+    Repeat: "Gjenta",
+    Volume: "Volum",
+    Person: "Person",
+    Today: "I dag",
+    "Next:": "Neste:",
+    Reset: "Tilbakestill",
+    Since: "Siden",
+    Light: "Lys",
+    Music: "Musikk",
+    Stop: "Stopp",
+    Started: "Startet",
+    "Ringing since": "Ringer siden",
+    h: "t",
+    in: "om",
+    ago: "siden",
+    "Entity not found": "Fant ikke enheten",
+    "Define an entity": "Du må angi en enhet",
+    Time: "Tid",
+    "Use default time for": "Bruk standardtid for",
+    "Action failed": "Handlingen mislyktes",
+    "fading in since": "trappes opp siden",
+    Mo: "Ma",
+    Tu: "Ti",
+    We: "On",
+    Th: "To",
+    Fr: "Fr",
+    Sa: "Lø",
+    Su: "Sø",
+    Off: "Av",
+    Armed: "Aktivert",
+    Unavailable: "Utilgjengelig",
+    Unknown: "Ukjent",
+};
+function localize(hass, key) {
+    return (language(hass) === "nb" ? nb : en)[key];
+}
+
 /**
  * @license
  * Copyright 2019 Google LLC
@@ -85,37 +252,8 @@ const t={ATTRIBUTE:1},e$1=t=>(...e)=>({_$litDirective$:t,values:e});class i{cons
  * SPDX-License-Identifier: BSD-3-Clause
  */const e=e$1(class extends i{constructor(t$1){if(super(t$1),t$1.type!==t.ATTRIBUTE||"class"!==t$1.name||t$1.strings?.length>2)throw Error("`classMap()` can only be used in the `class` attribute and must be the only part in the attribute.")}render(t){return " "+Object.keys(t).filter((s=>t[s])).join(" ")+" "}update(s,[i]){if(void 0===this.st){this.st=new Set,void 0!==s.strings&&(this.nt=new Set(s.strings.join(" ").split(/\s/).filter((t=>""!==t))));for(const t in i)i[t]&&!this.nt?.has(t)&&this.st.add(t);return this.render(i)}const r=s.element.classList;for(const t of this.st)t in i||(r.remove(t),this.st.delete(t));for(const t in i){const s=!!i[t];s===this.st.has(t)||this.nt?.has(t)||(s?(r.add(t),this.st.add(t)):(r.remove(t),this.st.delete(t)));}return T}});
 
-const SCHEMA = [
-    {
-        name: "appearance",
-        selector: {
-            select: {
-                mode: "dropdown",
-                options: [
-                    { value: "default", label: "Default" },
-                    { value: "bubble", label: "Bubble" }
-                ]
-            }
-        }
-    },
-    {
-        name: "entity",
-        required: true,
-        selector: { entity: { integration: "personal_wakeup", domain: "sensor" } }
-    },
-    { name: "name", selector: { text: {} } },
-    {
-        name: "snooze_presets",
-        selector: { text: {} }
-    }
-];
-const LABELS = {
-    appearance: "Appearance",
-    entity: "Wakeup alarm entity",
-    name: "Name (optional)",
-    snooze_presets: "Snooze presets in minutes (optional, e.g. 5, 10, 15)"
-};
 let PersonalWakeupCardEditor = class PersonalWakeupCardEditor extends i$1 {
+    _t(key) { return localize(this.hass, key); }
     setConfig(config) {
         this._config = { appearance: "default", ...config };
     }
@@ -157,6 +295,36 @@ let PersonalWakeupCardEditor = class PersonalWakeupCardEditor extends i$1 {
             snooze_presets: Array.isArray(this._config.snooze_presets)
                 ? this._config.snooze_presets.join(", ")
                 : this._config.snooze_presets ?? ""
+        };
+        const SCHEMA = [
+            {
+                name: "appearance",
+                selector: {
+                    select: {
+                        mode: "dropdown",
+                        options: [
+                            { value: "default", label: this._t("Default") },
+                            { value: "bubble", label: this._t("Bubble") }
+                        ]
+                    }
+                }
+            },
+            {
+                name: "entity",
+                required: true,
+                selector: { entity: { integration: "personal_wakeup", domain: "sensor" } }
+            },
+            { name: "name", selector: { text: {} } },
+            {
+                name: "snooze_presets",
+                selector: { text: {} }
+            }
+        ];
+        const LABELS = {
+            appearance: this._t("Appearance"),
+            entity: this._t("Wakeup alarm entity"),
+            name: this._t("Name (optional)"),
+            snooze_presets: this._t("Snooze presets in minutes (optional, e.g. 5, 10, 15)")
         };
         return x `
       <ha-form
@@ -269,7 +437,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const mode = partial.wake_mode ?? a.wake_mode;
         if ((mode !== "music" && !(partial.light_entity ?? a.light_entity)) ||
             (mode !== "lights" && !(partial.ma_player_entity ?? a.player_entity))) {
-            this._settingsError = "Choose a target for each enabled channel.";
+            this._settingsError = { key: "Choose a target for each enabled channel." };
             return;
         }
         this._settingsError = "";
@@ -278,9 +446,10 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             this.requestUpdate();
         }
     }
+    _t(key) { return localize(this.hass, key); }
     setConfig(config) {
         if (!config.entity) {
-            throw new Error("You must define an entity for lovelace-personal-wakeup-card");
+            throw new Error(this._t("Define an entity") + ": lovelace-personal-wakeup-card");
         }
         if (this._config?.entity !== config.entity) {
             this._settingsDraft = {};
@@ -322,8 +491,11 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
     _entity() {
         return this.hass?.states?.[this._config?.entity];
     }
+    _dayName(day) {
+        return language(this.hass) === "nb" ? this._t(WEEKDAY_LABELS[day]) : day;
+    }
     _lang() {
-        return this.hass?.locale?.language || undefined;
+        return language(this.hass);
     }
     _fmtTime(value) {
         if (!value)
@@ -343,9 +515,9 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
         const dayDiff = Math.round((startOf(d) - startOf(now)) / 86400000);
         if (dayDiff === 0)
-            return "Today";
+            return this._t("Today");
         if (dayDiff === 1)
-            return "Tomorrow";
+            return this._t("Tomorrow");
         return d.toLocaleDateString(this._lang(), { weekday: "short" });
     }
     _fmtRelative(value) {
@@ -357,8 +529,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const abs = Math.abs(diffMin);
         const h = Math.floor(abs / 60);
         const m = abs % 60;
-        const span = h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
-        return diffMin >= 0 ? `in ${span}` : `${span} ago`;
+        const span = h ? (m ? `${h} ${this._t("h")} ${m} min` : `${h} ${this._t("h")}`) : `${m} min`;
+        return diffMin >= 0 ? `${this._t("in")} ${span}` : `${span} ${this._t("ago")}`;
     }
     _normalizeTime(value) {
         if (!value)
@@ -385,7 +557,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         catch (err) {
             const msg = err?.message || err?.error || String(err);
             this._settingsError = String(msg);
-            this._toast(`Wakeup alarm: ${service} failed (${msg})`);
+            this._toast(`${this._t("Wakeup alarm")}: ${this._t("Action failed")} (${msg})`);
             return false;
         }
         finally {
@@ -418,7 +590,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             ? current.filter((d) => d !== day)
             : [...current, day];
         if (!next.length) {
-            this._toast("At least one weekday must stay selected. Use Enabled to turn the alarm off.");
+            this._toast(this._t("At least one weekday must stay selected. Use Enabled to turn the alarm off."));
             return;
         }
         const partial = { weekdays: WEEKDAYS.filter((d) => next.includes(d)) };
@@ -435,7 +607,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         <ha-card>
           <div class="error">
             <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-            Entity ${this._config?.entity || "(not set)"} not found
+            ${this._t("Entity not found")}: ${this._config?.entity || this._t("(not set)")}
           </div>
         </ha-card>
       `;
@@ -474,7 +646,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const anyoneHome = people.some((person) => this.hass.states[person]?.state === "home");
         const defaultSnooze = Number(a.snooze_minutes ?? 10);
         const presets = Array.from(new Set([...(this._config.snooze_presets ?? DEFAULT_SNOOZE_PRESETS), defaultSnooze])).sort((x, y) => x - y);
-        const title = this._config.name || a.friendly_name || "Wakeup alarm";
+        const title = this._config.name || a.friendly_name || this._t("Wakeup alarm");
         const icon = STATE_ICONS[st] ?? "mdi:alarm";
         return x `
       <ha-card class=${e({ [`is-${st}`]: true })}>
@@ -487,8 +659,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             </div>
           </div>
           <div class="header-actions">
-            <div class="pill"><span class="dot"></span>${STATE_LABELS[st] ?? st}</div>
-            <button class="icon-button" type="button" title="Configure" aria-label="Configure"
+            <div class="pill"><span class="dot"></span>${STATE_LABELS[st] ? this._t(STATE_LABELS[st]) : st}</div>
+            <button class="icon-button" type="button" title=${this._t("Configure")} aria-label=${this._t("Configure")}
               @click=${this._openSettings}>
               <ha-icon icon="mdi:cog-outline"></ha-icon>
             </button>
@@ -500,15 +672,15 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
               <div class="hero">
                 <div class="hero-text">
                   ${snoozed
-                ? x `<span class="hero-title">Snoozed</span>
-                        <span class="hero-sub">Rings again at ${this._fmtTime(snoozeUntil)}
+                ? x `<span class="hero-title">${this._t("Snoozed")}</span>
+                        <span class="hero-sub">${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}
                           <em>${this._fmtRelative(snoozeUntil)}</em></span>`
                 : st === "rising"
-                    ? x `<span class="hero-title">Waking up</span>
-                          <span class="hero-sub">${live.wake_mode === "lights" ? "Light" : live.wake_mode === "music" ? "Music" : "Light and music"} fading in since
+                    ? x `<span class="hero-title">${this._t("Waking up")}</span>
+                          <span class="hero-sub">${live.wake_mode === "lights" ? this._t("Light") : live.wake_mode === "music" ? this._t("Music") : this._t("Light and music")} ${this._t("fading in since")}
                             ${this._fmtTime(runStarted)}</span>`
-                    : x `<span class="hero-title">Ringing</span>
-                          <span class="hero-sub">Since ${this._fmtTime(runStarted)}</span>`}
+                    : x `<span class="hero-title">${this._t("Ringing")}</span>
+                          <span class="hero-sub">${this._t("Since")} ${this._fmtTime(runStarted)}</span>`}
                 </div>
                 <button
                   class="stop"
@@ -517,13 +689,13 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
                   @click=${() => this._call("stop")}
                 >
                   <ha-icon icon="mdi:stop-circle-outline"></ha-icon>
-                  Stop
+                  ${this._t("Stop")}
                 </button>
                 ${canSnooze
                 ? x `
                       <div class="snooze-row">
                         <span class="snooze-label">
-                          <ha-icon icon="mdi:alarm-snooze"></ha-icon>Snooze
+                          <ha-icon icon="mdi:alarm-snooze"></ha-icon>${this._t("Snooze")}
                         </span>
                         ${presets.map((m) => x `
                             <button
@@ -547,7 +719,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             <label class="toggle">
               <span>
                 <ha-icon icon="mdi:power"></ha-icon>
-                Enabled
+                ${this._t("Enabled")}
               </span>
               <ha-switch
                 .checked=${enabled}
@@ -557,7 +729,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             <label class="toggle">
               <span>
                 <ha-icon icon="mdi:debug-step-over"></ha-icon>
-                Skip next
+                ${this._t("Skip next")}
                 ${skipNext && skippedFire
             ? x `<small>${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}</small>`
             : E}
@@ -582,35 +754,35 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             }
         }}>
         <div class="dialog-header">
-          <h2 id="settings-title">${title} settings</h2>
-          <button class="icon-button" type="button" title="Close settings" aria-label="Close settings"
+          <h2 id="settings-title">${title} ${this._t("settings")}</h2>
+          <button class="icon-button" type="button" title=${this._t("Close settings")} aria-label=${this._t("Close settings")}
             autofocus @click=${this._closeSettings}>
             <ha-icon icon="mdi:close"></ha-icon>
           </button>
         </div>
         <div class="settings">
           ${advanced ? x `<div class="field device-field">
-            <label class="label" for="wake-mode">Wake mode</label>
-            <select id="wake-mode" aria-label="Wake mode" .value=${mode}
+            <label class="label" for="wake-mode">${this._t("Wake mode")}</label>
+            <select id="wake-mode" aria-label=${this._t("Wake mode")} .value=${mode}
               @change=${(e) => this._stage({ wake_mode: e.target.value })}>
-              <option value="lights" ?selected=${mode === "lights"}>Lights only</option>
-              <option value="music" ?selected=${mode === "music"}>Music only</option>
-              <option value="both" ?selected=${mode === "both"}>Lights and music</option>
+              <option value="lights" ?selected=${mode === "lights"}>${this._t("Lights only")}</option>
+              <option value="music" ?selected=${mode === "music"}>${this._t("Music only")}</option>
+              <option value="both" ?selected=${mode === "both"}>${this._t("Lights and music")}</option>
             </select>
-          </div>` : x `<p class="device-field">Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.</p>`}
+          </div>` : x `<p class="device-field">${this._t("Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.")}</p>`}
           <div class="field time-field">
-            <span class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>Alarm time</span>
+            <span class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>${this._t("Alarm time")}</span>
             <input
               class="time-input"
               type="time"
-              aria-label="Alarm time"
+              aria-label=${this._t("Alarm time")}
               .value=${timeOfDay}
               @change=${(e) => this._set({ time_of_day: e.target.value })}
             />
           </div>
 
           <div class="field">
-            <span class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>Repeat</span>
+            <span class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>${this._t("Repeat")}</span>
             <div class=${advanced ? "daily-times" : "weekdays"}>
               ${WEEKDAYS.map((d) => x `
                   <div class="day-row">
@@ -621,55 +793,55 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
                     aria-pressed=${weekdays.includes(d)}
                     @click=${() => this._toggleWeekday(d, weekdays)}
                   >
-                    ${WEEKDAY_LABELS[d]}
+                    ${this._t(WEEKDAY_LABELS[d])}
                   </button>
                   ${advanced ? x `<input class="time-input" type="time" data-day-time=${d}
-                    aria-label=${`${d} alarm time`} .value=${dayTimes[d] ?? timeOfDay}
+                    aria-label=${`${this._dayName(d)} ${this._t("Alarm time")}`} .value=${dayTimes[d] ?? timeOfDay}
                     @change=${(e) => {
             const value = e.target.value;
             if (value)
                 this._stage({ day_times: { ...dayTimes, [d]: value } });
         }} />
-                    <button type="button" class="text-button" aria-label=${`Use default time for ${d}`}
+                    <button type="button" class="text-button" aria-label=${`${this._t("Use default time for")} ${this._dayName(d)}`}
                       ?disabled=${!(d in dayTimes)} @click=${() => {
             const next = { ...dayTimes };
             delete next[d];
             this._stage({ day_times: next });
-        }}>${d in dayTimes ? "Reset" : "Default"}</button>` : E}
+        }}>${d in dayTimes ? this._t("Reset") : this._t("Default")}</button>` : E}
                   </div>
                 `)}
             </div>
           </div>
 
-          ${lights ? this._renderSlider("mdi:weather-sunset-up", "Light fade", "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : E}
-          ${music ? x `${this._renderSlider("mdi:music-note", "Music fade", "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
-          ${this._renderSlider("mdi:volume-high", "Volume", "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
+          ${lights ? this._renderSlider("mdi:weather-sunset-up", this._t("Light fade"), "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : E}
+          ${music ? x `${this._renderSlider("mdi:music-note", this._t("Music fade"), "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
+          ${this._renderSlider("mdi:volume-high", this._t("Volume"), "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
 
           <div class="field">
-            <span class="label"><ha-icon icon="mdi:playlist-music"></ha-icon>Playlist</span>
+            <span class="label"><ha-icon icon="mdi:playlist-music"></ha-icon>${this._t("Playlist")}</span>
             ${playlistOptions.length
             ? x `
                   <select
-                    aria-label="Playlist"
+                    aria-label=${this._t("Playlist")}
                     .value=${playlist}
                     @change=${(e) => this._set({ playlist: e.target.value })}
                   >
                     ${playlistOptions.map((opt) => x `<option .value=${opt} ?selected=${opt === playlist}>${opt}</option>`)}
                   </select>
                 `
-            : x `<span class="value muted">${playlist || "No playlist configured"}</span>`}
+            : x `<span class="value muted">${playlist || this._t("No playlist configured")}</span>`}
           </div>
           ` : E}
-          ${lights ? this._renderEntitySelector("light_entity", "Wakeup light", "light", a.light_entity) : E}
-          ${music ? this._renderEntitySelector("ma_player_entity", "Music player", "media_player", a.ma_player_entity ?? a.player_entity) : E}
-          ${this._renderEntitySelector(advanced ? "person_entities" : "person_entity", advanced ? "People (anyone home)" : "Person", "person", advanced ? people : personEntity)}
+          ${lights ? this._renderEntitySelector("light_entity", this._t("Wakeup light"), "light", a.light_entity) : E}
+          ${music ? this._renderEntitySelector("ma_player_entity", this._t("Music player"), "media_player", a.ma_player_entity ?? a.player_entity) : E}
+          ${this._renderEntitySelector(advanced ? "person_entities" : "person_entity", advanced ? this._t("People (anyone home)") : this._t("Person"), "person", advanced ? people : personEntity)}
           <div class="toggles">
             <label class="toggle">
               <span>
-                <ha-icon icon="mdi:home-account"></ha-icon>Only when home
+                <ha-icon icon="mdi:home-account"></ha-icon>${this._t("Only when home")}
                 ${people.length
             ? x `<small class=${e({ away: !anyoneHome })}>
-                      ${anyoneHome ? "Someone home" : "Nobody home"}
+                      ${anyoneHome ? this._t("Someone home") : this._t("Nobody home")}
                     </small>`
             : E}
               </span>
@@ -680,24 +852,24 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
           </div>
         </div>
 
-        ${this._settingsError ? x `<p role="alert" class="error">${this._settingsError}</p>` : E}
+        ${this._settingsError ? x `<p role="alert" class="error">${typeof this._settingsError === "string" ? this._settingsError : this._t(this._settingsError.key)}</p>` : E}
         ${advanced ? x `<div class="save-row">
-          <span class="value muted">Mode, targets, people and daily schedule save together.</span>
+          <span class="value muted">${this._t("Mode, targets, people and daily schedule save together.")}</span>
           <button class="text-button" data-discard type="button"
             ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
-            @click=${() => { this._settingsDraft = {}; this._savedDraft = null; this._settingsError = ""; }}>Discard changes</button>
+            @click=${() => { this._settingsDraft = {}; this._savedDraft = null; this._settingsError = ""; }}>${this._t("Discard changes")}</button>
           <button class="text-button" data-save type="button"
             ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
-            @click=${this._saveSettings}>Save configuration</button>
+            @click=${this._saveSettings}>${this._t("Save configuration")}</button>
         </div>` : E}
         <div class="footer">
           <span class="footer-note">
             ${nextFire && !snoozed
             ? x `<ha-icon icon="mdi:alarm-check"></ha-icon>
-                  Next: ${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)}`
+                  ${this._t("Next:")} ${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)}`
             : enabled
                 ? E
-                : x `<ha-icon icon="mdi:alarm-off"></ha-icon> Alarm is off`}
+                : x `<ha-icon icon="mdi:alarm-off"></ha-icon> ${this._t("Alarm is off")}`}
           </span>
           <button
             class="text-button"
@@ -709,7 +881,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         }}
           >
             <ha-icon icon="mdi:play-circle-outline"></ha-icon>
-            Test now
+            ${this._t("Test now")}
           </button>
         </div>
       </dialog>
@@ -720,15 +892,15 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             case "armed":
                 return nextFire
                     ? `${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)} · ${this._fmtRelative(nextFire)}`
-                    : "No upcoming alarm";
+                    : this._t("No upcoming alarm");
             case "snoozed":
-                return `Rings again at ${this._fmtTime(snoozeUntil)}`;
+                return `${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}`;
             case "rising":
-                return `Started ${this._fmtTime(runStarted)}`;
+                return `${this._t("Started")} ${this._fmtTime(runStarted)}`;
             case "ringing":
-                return `Ringing since ${this._fmtTime(runStarted)}`;
+                return `${this._t("Ringing since")} ${this._fmtTime(runStarted)}`;
             case "disarmed":
-                return "Alarm is off";
+                return this._t("Alarm is off");
             default:
                 return "";
         }

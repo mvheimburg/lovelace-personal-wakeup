@@ -1,3 +1,4 @@
+import { localize, language, type TranslationKey } from "./localize";
 import { LitElement, css, html, nothing } from "lit";
 import { property, state, customElement } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
@@ -10,6 +11,7 @@ interface HassEntity {
 }
 
 interface HomeAssistant {
+  language?: string;
   states: Record<string, HassEntity>;
   locale?: { language?: string };
   callService(
@@ -28,7 +30,7 @@ interface PersonalWakeupCardConfig {
 }
 
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-const WEEKDAY_LABELS: Record<string, string> = {
+const WEEKDAY_LABELS: Record<string, TranslationKey> = {
   mon: "Mo",
   tue: "Tu",
   wed: "We",
@@ -49,7 +51,7 @@ function sameSetting(left: unknown, right: unknown): boolean {
 
 const DEFAULT_SNOOZE_PRESETS = [5, 10, 15];
 
-const STATE_LABELS: Record<string, string> = {
+const STATE_LABELS: Record<string, TranslationKey> = {
   disarmed: "Off",
   armed: "Armed",
   rising: "Waking up",
@@ -75,7 +77,7 @@ export class PersonalWakeupCard extends LitElement {
   @state() private _draft: Record<string, number> = {};
   @state() private _busy: string | null = null;
   @state() private _settingsDraft: Record<string, any> = {};
-  @state() private _settingsError = "";
+  @state() private _settingsError: string | { key: TranslationKey } = "";
   private _savedDraft: Record<string, any> | null = null;
   private _tick?: number;
 
@@ -117,7 +119,7 @@ export class PersonalWakeupCard extends LitElement {
     const mode = partial.wake_mode ?? a.wake_mode;
     if ((mode !== "music" && !(partial.light_entity ?? a.light_entity)) ||
         (mode !== "lights" && !(partial.ma_player_entity ?? a.player_entity))) {
-      this._settingsError = "Choose a target for each enabled channel.";
+      this._settingsError = { key: "Choose a target for each enabled channel." };
       return;
     }
     this._settingsError = "";
@@ -127,9 +129,11 @@ export class PersonalWakeupCard extends LitElement {
     }
   }
 
+  private _t(key: TranslationKey): string { return localize(this.hass, key); }
+
   public setConfig(config: PersonalWakeupCardConfig): void {
     if (!config.entity) {
-      throw new Error("You must define an entity for lovelace-personal-wakeup-card");
+      throw new Error(this._t("Define an entity") + ": lovelace-personal-wakeup-card");
     }
     if (this._config?.entity !== config.entity) {
       this._settingsDraft = {};
@@ -181,8 +185,12 @@ export class PersonalWakeupCard extends LitElement {
     return this.hass?.states?.[this._config?.entity];
   }
 
+  private _dayName(day: string): string {
+    return language(this.hass) === "nb" ? this._t(WEEKDAY_LABELS[day]) : day;
+  }
+
   private _lang(): string | undefined {
-    return this.hass?.locale?.language || undefined;
+    return language(this.hass);
   }
 
   private _fmtTime(value: string | null | undefined): string {
@@ -199,8 +207,8 @@ export class PersonalWakeupCard extends LitElement {
     const now = new Date();
     const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
     const dayDiff = Math.round((startOf(d) - startOf(now)) / 86_400_000);
-    if (dayDiff === 0) return "Today";
-    if (dayDiff === 1) return "Tomorrow";
+    if (dayDiff === 0) return this._t("Today");
+    if (dayDiff === 1) return this._t("Tomorrow");
     return d.toLocaleDateString(this._lang(), { weekday: "short" });
   }
 
@@ -211,8 +219,8 @@ export class PersonalWakeupCard extends LitElement {
     const abs = Math.abs(diffMin);
     const h = Math.floor(abs / 60);
     const m = abs % 60;
-    const span = h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
-    return diffMin >= 0 ? `in ${span}` : `${span} ago`;
+    const span = h ? (m ? `${h} ${this._t("h")} ${m} min` : `${h} ${this._t("h")}`) : `${m} min`;
+    return diffMin >= 0 ? `${this._t("in")} ${span}` : `${span} ${this._t("ago")}`;
   }
 
   private _normalizeTime(value: unknown): string {
@@ -246,7 +254,7 @@ export class PersonalWakeupCard extends LitElement {
     } catch (err: any) {
       const msg = err?.message || err?.error || String(err);
       this._settingsError = String(msg);
-      this._toast(`Wakeup alarm: ${service} failed (${msg})`);
+      this._toast(`${this._t("Wakeup alarm")}: ${this._t("Action failed")} (${msg})`);
       return false;
     } finally {
       this._busy = null;
@@ -283,7 +291,7 @@ export class PersonalWakeupCard extends LitElement {
       ? current.filter((d) => d !== day)
       : [...current, day];
     if (!next.length) {
-      this._toast("At least one weekday must stay selected. Use Enabled to turn the alarm off.");
+      this._toast(this._t("At least one weekday must stay selected. Use Enabled to turn the alarm off."));
       return;
     }
     const partial = { weekdays: WEEKDAYS.filter((d) => next.includes(d)) };
@@ -300,7 +308,7 @@ export class PersonalWakeupCard extends LitElement {
         <ha-card>
           <div class="error">
             <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-            Entity ${this._config?.entity || "(not set)"} not found
+            ${this._t("Entity not found")}: ${this._config?.entity || this._t("(not set)")}
           </div>
         </ha-card>
       `;
@@ -345,7 +353,7 @@ export class PersonalWakeupCard extends LitElement {
       new Set([...(this._config.snooze_presets ?? DEFAULT_SNOOZE_PRESETS), defaultSnooze])
     ).sort((x, y) => x - y);
 
-    const title = this._config.name || a.friendly_name || "Wakeup alarm";
+    const title = this._config.name || a.friendly_name || this._t("Wakeup alarm");
     const icon = STATE_ICONS[st] ?? "mdi:alarm";
 
     return html`
@@ -359,8 +367,8 @@ export class PersonalWakeupCard extends LitElement {
             </div>
           </div>
           <div class="header-actions">
-            <div class="pill"><span class="dot"></span>${STATE_LABELS[st] ?? st}</div>
-            <button class="icon-button" type="button" title="Configure" aria-label="Configure"
+            <div class="pill"><span class="dot"></span>${STATE_LABELS[st] ? this._t(STATE_LABELS[st]) : st}</div>
+            <button class="icon-button" type="button" title=${this._t("Configure")} aria-label=${this._t("Configure")}
               @click=${this._openSettings}>
               <ha-icon icon="mdi:cog-outline"></ha-icon>
             </button>
@@ -372,15 +380,15 @@ export class PersonalWakeupCard extends LitElement {
               <div class="hero">
                 <div class="hero-text">
                   ${snoozed
-                    ? html`<span class="hero-title">Snoozed</span>
-                        <span class="hero-sub">Rings again at ${this._fmtTime(snoozeUntil)}
+                    ? html`<span class="hero-title">${this._t("Snoozed")}</span>
+                        <span class="hero-sub">${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}
                           <em>${this._fmtRelative(snoozeUntil)}</em></span>`
                     : st === "rising"
-                      ? html`<span class="hero-title">Waking up</span>
-                          <span class="hero-sub">${live.wake_mode === "lights" ? "Light" : live.wake_mode === "music" ? "Music" : "Light and music"} fading in since
+                      ? html`<span class="hero-title">${this._t("Waking up")}</span>
+                          <span class="hero-sub">${live.wake_mode === "lights" ? this._t("Light") : live.wake_mode === "music" ? this._t("Music") : this._t("Light and music")} ${this._t("fading in since")}
                             ${this._fmtTime(runStarted)}</span>`
-                      : html`<span class="hero-title">Ringing</span>
-                          <span class="hero-sub">Since ${this._fmtTime(runStarted)}</span>`}
+                      : html`<span class="hero-title">${this._t("Ringing")}</span>
+                          <span class="hero-sub">${this._t("Since")} ${this._fmtTime(runStarted)}</span>`}
                 </div>
                 <button
                   class="stop"
@@ -389,13 +397,13 @@ export class PersonalWakeupCard extends LitElement {
                   @click=${() => this._call("stop")}
                 >
                   <ha-icon icon="mdi:stop-circle-outline"></ha-icon>
-                  Stop
+                  ${this._t("Stop")}
                 </button>
                 ${canSnooze
                   ? html`
                       <div class="snooze-row">
                         <span class="snooze-label">
-                          <ha-icon icon="mdi:alarm-snooze"></ha-icon>Snooze
+                          <ha-icon icon="mdi:alarm-snooze"></ha-icon>${this._t("Snooze")}
                         </span>
                         ${presets.map(
                           (m) => html`
@@ -422,7 +430,7 @@ export class PersonalWakeupCard extends LitElement {
             <label class="toggle">
               <span>
                 <ha-icon icon="mdi:power"></ha-icon>
-                Enabled
+                ${this._t("Enabled")}
               </span>
               <ha-switch
                 .checked=${enabled}
@@ -433,7 +441,7 @@ export class PersonalWakeupCard extends LitElement {
             <label class="toggle">
               <span>
                 <ha-icon icon="mdi:debug-step-over"></ha-icon>
-                Skip next
+                ${this._t("Skip next")}
                 ${skipNext && skippedFire
                   ? html`<small>${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}</small>`
                   : nothing}
@@ -458,28 +466,28 @@ export class PersonalWakeupCard extends LitElement {
         }
       }}>
         <div class="dialog-header">
-          <h2 id="settings-title">${title} settings</h2>
-          <button class="icon-button" type="button" title="Close settings" aria-label="Close settings"
+          <h2 id="settings-title">${title} ${this._t("settings")}</h2>
+          <button class="icon-button" type="button" title=${this._t("Close settings")} aria-label=${this._t("Close settings")}
             autofocus @click=${this._closeSettings}>
             <ha-icon icon="mdi:close"></ha-icon>
           </button>
         </div>
         <div class="settings">
           ${advanced ? html`<div class="field device-field">
-            <label class="label" for="wake-mode">Wake mode</label>
-            <select id="wake-mode" aria-label="Wake mode" .value=${mode}
+            <label class="label" for="wake-mode">${this._t("Wake mode")}</label>
+            <select id="wake-mode" aria-label=${this._t("Wake mode")} .value=${mode}
               @change=${(e: Event) => this._stage({ wake_mode: (e.target as HTMLSelectElement).value })}>
-              <option value="lights" ?selected=${mode === "lights"}>Lights only</option>
-              <option value="music" ?selected=${mode === "music"}>Music only</option>
-              <option value="both" ?selected=${mode === "both"}>Lights and music</option>
+              <option value="lights" ?selected=${mode === "lights"}>${this._t("Lights only")}</option>
+              <option value="music" ?selected=${mode === "music"}>${this._t("Music only")}</option>
+              <option value="both" ?selected=${mode === "both"}>${this._t("Lights and music")}</option>
             </select>
-          </div>` : html`<p class="device-field">Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.</p>`}
+          </div>` : html`<p class="device-field">${this._t("Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.")}</p>`}
           <div class="field time-field">
-            <span class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>Alarm time</span>
+            <span class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>${this._t("Alarm time")}</span>
             <input
               class="time-input"
               type="time"
-              aria-label="Alarm time"
+              aria-label=${this._t("Alarm time")}
               .value=${timeOfDay}
               @change=${(e: Event) =>
                 this._set({ time_of_day: (e.target as HTMLInputElement).value })}
@@ -487,7 +495,7 @@ export class PersonalWakeupCard extends LitElement {
           </div>
 
           <div class="field">
-            <span class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>Repeat</span>
+            <span class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>${this._t("Repeat")}</span>
             <div class=${advanced ? "daily-times" : "weekdays"}>
               ${WEEKDAYS.map(
                 (d) => html`
@@ -499,34 +507,34 @@ export class PersonalWakeupCard extends LitElement {
                     aria-pressed=${weekdays.includes(d)}
                     @click=${() => this._toggleWeekday(d, weekdays)}
                   >
-                    ${WEEKDAY_LABELS[d]}
+                    ${this._t(WEEKDAY_LABELS[d])}
                   </button>
                   ${advanced ? html`<input class="time-input" type="time" data-day-time=${d}
-                    aria-label=${`${d} alarm time`} .value=${dayTimes[d] ?? timeOfDay}
+                    aria-label=${`${this._dayName(d)} ${this._t("Alarm time")}`} .value=${dayTimes[d] ?? timeOfDay}
                     @change=${(e: Event) => {
                       const value = (e.target as HTMLInputElement).value;
                       if (value) this._stage({ day_times: { ...dayTimes, [d]: value } });
                     }} />
-                    <button type="button" class="text-button" aria-label=${`Use default time for ${d}`}
+                    <button type="button" class="text-button" aria-label=${`${this._t("Use default time for")} ${this._dayName(d)}`}
                       ?disabled=${!(d in dayTimes)} @click=${() => {
                         const next = { ...dayTimes }; delete next[d]; this._stage({ day_times: next });
-                      }}>${d in dayTimes ? "Reset" : "Default"}</button>` : nothing}
+                      }}>${d in dayTimes ? this._t("Reset") : this._t("Default")}</button>` : nothing}
                   </div>
                 `
               )}
             </div>
           </div>
 
-          ${lights ? this._renderSlider("mdi:weather-sunset-up", "Light fade", "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : nothing}
-          ${music ? html`${this._renderSlider("mdi:music-note", "Music fade", "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
-          ${this._renderSlider("mdi:volume-high", "Volume", "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
+          ${lights ? this._renderSlider("mdi:weather-sunset-up", this._t("Light fade"), "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : nothing}
+          ${music ? html`${this._renderSlider("mdi:music-note", this._t("Music fade"), "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
+          ${this._renderSlider("mdi:volume-high", this._t("Volume"), "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
 
           <div class="field">
-            <span class="label"><ha-icon icon="mdi:playlist-music"></ha-icon>Playlist</span>
+            <span class="label"><ha-icon icon="mdi:playlist-music"></ha-icon>${this._t("Playlist")}</span>
             ${playlistOptions.length
               ? html`
                   <select
-                    aria-label="Playlist"
+                    aria-label=${this._t("Playlist")}
                     .value=${playlist}
                     @change=${(e: Event) =>
                       this._set({ playlist: (e.target as HTMLSelectElement).value })}
@@ -536,19 +544,19 @@ export class PersonalWakeupCard extends LitElement {
                     )}
                   </select>
                 `
-              : html`<span class="value muted">${playlist || "No playlist configured"}</span>`}
+              : html`<span class="value muted">${playlist || this._t("No playlist configured")}</span>`}
           </div>
           ` : nothing}
-          ${lights ? this._renderEntitySelector("light_entity", "Wakeup light", "light", a.light_entity) : nothing}
-          ${music ? this._renderEntitySelector("ma_player_entity", "Music player", "media_player", a.ma_player_entity ?? a.player_entity) : nothing}
-          ${this._renderEntitySelector(advanced ? "person_entities" : "person_entity", advanced ? "People (anyone home)" : "Person", "person", advanced ? people : personEntity)}
+          ${lights ? this._renderEntitySelector("light_entity", this._t("Wakeup light"), "light", a.light_entity) : nothing}
+          ${music ? this._renderEntitySelector("ma_player_entity", this._t("Music player"), "media_player", a.ma_player_entity ?? a.player_entity) : nothing}
+          ${this._renderEntitySelector(advanced ? "person_entities" : "person_entity", advanced ? this._t("People (anyone home)") : this._t("Person"), "person", advanced ? people : personEntity)}
           <div class="toggles">
             <label class="toggle">
               <span>
-                <ha-icon icon="mdi:home-account"></ha-icon>Only when home
+                <ha-icon icon="mdi:home-account"></ha-icon>${this._t("Only when home")}
                 ${people.length
                   ? html`<small class=${classMap({ away: !anyoneHome })}>
-                      ${anyoneHome ? "Someone home" : "Nobody home"}
+                      ${anyoneHome ? this._t("Someone home") : this._t("Nobody home")}
                     </small>`
                   : nothing}
               </span>
@@ -559,24 +567,24 @@ export class PersonalWakeupCard extends LitElement {
           </div>
         </div>
 
-        ${this._settingsError ? html`<p role="alert" class="error">${this._settingsError}</p>` : nothing}
+        ${this._settingsError ? html`<p role="alert" class="error">${typeof this._settingsError === "string" ? this._settingsError : this._t(this._settingsError.key)}</p>` : nothing}
         ${advanced ? html`<div class="save-row">
-          <span class="value muted">Mode, targets, people and daily schedule save together.</span>
+          <span class="value muted">${this._t("Mode, targets, people and daily schedule save together.")}</span>
           <button class="text-button" data-discard type="button"
             ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
-            @click=${() => { this._settingsDraft = {}; this._savedDraft = null; this._settingsError = ""; }}>Discard changes</button>
+            @click=${() => { this._settingsDraft = {}; this._savedDraft = null; this._settingsError = ""; }}>${this._t("Discard changes")}</button>
           <button class="text-button" data-save type="button"
             ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
-            @click=${this._saveSettings}>Save configuration</button>
+            @click=${this._saveSettings}>${this._t("Save configuration")}</button>
         </div>` : nothing}
         <div class="footer">
           <span class="footer-note">
             ${nextFire && !snoozed
               ? html`<ha-icon icon="mdi:alarm-check"></ha-icon>
-                  Next: ${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)}`
+                  ${this._t("Next:")} ${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)}`
               : enabled
                 ? nothing
-                : html`<ha-icon icon="mdi:alarm-off"></ha-icon> Alarm is off`}
+                : html`<ha-icon icon="mdi:alarm-off"></ha-icon> ${this._t("Alarm is off")}`}
           </span>
           <button
             class="text-button"
@@ -588,7 +596,7 @@ export class PersonalWakeupCard extends LitElement {
             }}
           >
             <ha-icon icon="mdi:play-circle-outline"></ha-icon>
-            Test now
+            ${this._t("Test now")}
           </button>
         </div>
       </dialog>
@@ -605,15 +613,15 @@ export class PersonalWakeupCard extends LitElement {
       case "armed":
         return nextFire
           ? `${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)} · ${this._fmtRelative(nextFire)}`
-          : "No upcoming alarm";
+          : this._t("No upcoming alarm");
       case "snoozed":
-        return `Rings again at ${this._fmtTime(snoozeUntil)}`;
+        return `${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}`;
       case "rising":
-        return `Started ${this._fmtTime(runStarted)}`;
+        return `${this._t("Started")} ${this._fmtTime(runStarted)}`;
       case "ringing":
-        return `Ringing since ${this._fmtTime(runStarted)}`;
+        return `${this._t("Ringing since")} ${this._fmtTime(runStarted)}`;
       case "disarmed":
-        return "Alarm is off";
+        return this._t("Alarm is off");
       default:
         return "";
     }

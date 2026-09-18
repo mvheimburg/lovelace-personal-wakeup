@@ -1,7 +1,10 @@
+import { localize, type TranslationKey } from "./localize";
 import { LitElement, html, css } from "lit";
 import { property, state, customElement } from "lit/decorators.js";
 
 interface HomeAssistant {
+  language?: string;
+  locale?: { language?: string };
   states: Record<string, any>;
 }
 
@@ -13,42 +16,12 @@ interface PersonalWakeupCardConfig {
   snooze_presets?: number[];
 }
 
-const SCHEMA = [
-  {
-    name: "appearance",
-    selector: {
-      select: {
-        mode: "dropdown",
-        options: [
-          { value: "default", label: "Default" },
-          { value: "bubble", label: "Bubble" }
-        ]
-      }
-    }
-  },
-  {
-    name: "entity",
-    required: true,
-    selector: { entity: { integration: "personal_wakeup", domain: "sensor" } }
-  },
-  { name: "name", selector: { text: {} } },
-  {
-    name: "snooze_presets",
-    selector: { text: {} }
-  }
-];
-
-const LABELS: Record<string, string> = {
-  appearance: "Appearance",
-  entity: "Wakeup alarm entity",
-  name: "Name (optional)",
-  snooze_presets: "Snooze presets in minutes (optional, e.g. 5, 10, 15)"
-};
-
 @customElement("lovelace-personal-wakeup-card-editor")
 export class PersonalWakeupCardEditor extends LitElement {
   @property({ attribute: false }) public hass!: HomeAssistant;
   @state() private _config!: PersonalWakeupCardConfig;
+
+  private _t(key: TranslationKey): string { return localize(this.hass, key); }
 
   public setConfig(config: PersonalWakeupCardConfig): void {
     this._config = { appearance: "default", ...config };
@@ -93,6 +66,39 @@ export class PersonalWakeupCardEditor extends LitElement {
       snooze_presets: Array.isArray(this._config.snooze_presets)
         ? this._config.snooze_presets.join(", ")
         : this._config.snooze_presets ?? ""
+    };
+
+
+    const SCHEMA = [
+      {
+        name: "appearance",
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: [
+              { value: "default", label: this._t("Default") },
+              { value: "bubble", label: this._t("Bubble") }
+            ]
+          }
+        }
+      },
+      {
+        name: "entity",
+        required: true,
+        selector: { entity: { integration: "personal_wakeup", domain: "sensor" } }
+      },
+      { name: "name", selector: { text: {} } },
+      {
+        name: "snooze_presets",
+        selector: { text: {} }
+      }
+    ];
+
+    const LABELS: Record<string, string> = {
+      appearance: this._t("Appearance"),
+      entity: this._t("Wakeup alarm entity"),
+      name: this._t("Name (optional)"),
+      snooze_presets: this._t("Snooze presets in minutes (optional, e.g. 5, 10, 15)")
     };
 
     return html`

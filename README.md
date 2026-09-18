@@ -109,3 +109,9 @@ npm run build      # writes dist/lovelace-personal-wakeup-card.js
 CI checks that `dist/` is committed up to date. Releases are automatic: bump
 `version` in `package.json`, merge to `main`, and the release workflow tags
 `v<version>` and attaches the built card to a GitHub release.
+
+## Language
+
+Card controls, status labels, schedules, settings, accessibility labels and the visual editor follow Home Assistant's frontend language (`hass.language`, falling back to `hass.locale.language`). Bokmål is available for `nb`/`nb-NO`, with legacy `no` and `nn` aliases; matching ignores case and accepts underscores. Other languages fall back to English. Changing the frontend language updates the card and editor immediately.
+
+Custom titles, entity friendly names, playlist names and backend error details are shown unchanged. Service names, entity IDs, weekday keys and configuration values remain unchanged. The static card-picker registration uses the English product name and description because it has no Home Assistant language context.
