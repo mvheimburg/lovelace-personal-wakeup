@@ -1,4 +1,4 @@
-import { localize, language, type TranslationKey } from "./localize";
+import { localize, language, formattingLocale, type TranslationKey } from "./localize";
 import { LitElement, css, html, nothing } from "lit";
 import { property, state, customElement } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
@@ -190,7 +190,7 @@ export class PersonalWakeupCard extends LitElement {
   }
 
   private _lang(): string | undefined {
-    return language(this.hass);
+    return formattingLocale(this.hass);
   }
 
   private _fmtTime(value: string | null | undefined): string {

@@ -34,6 +34,17 @@ function language(hass) {
         .split("-")[0];
     return ["nb", "no", "nn"].includes(code) ? "nb" : "en";
 }
+/** Preserve regional formatting independently of the translated dictionary. */
+function formattingLocale(hass) {
+    const code = (hass?.language || hass?.locale?.language || "en")
+        .toLowerCase().replace(/_/g, "-").replace(/^(no|nn)(?=-|$)/, "nb");
+    try {
+        return Intl.getCanonicalLocales(code)[0] || "en";
+    }
+    catch {
+        return "en";
+    }
+}
 const en = {
     "Snooze presets in minutes (optional, e.g. 5, 10, 15)": "Snooze presets in minutes (optional, e.g. 5, 10, 15)",
     "Wakeup alarm entity": "Wakeup alarm entity",
@@ -495,7 +506,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         return language(this.hass) === "nb" ? this._t(WEEKDAY_LABELS[day]) : day;
     }
     _lang() {
-        return language(this.hass);
+        return formattingLocale(this.hass);
     }
     _fmtTime(value) {
         if (!value)
