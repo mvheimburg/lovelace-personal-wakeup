@@ -199,7 +199,7 @@ const nb = {
     Su: "Sø",
     On: "På",
     Off: "Av",
-    Armed: "Aktivert",
+    Armed: "Klar",
     Unavailable: "Utilgjengelig",
     Unknown: "Ukjent",
 };

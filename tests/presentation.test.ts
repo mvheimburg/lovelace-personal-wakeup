@@ -27,7 +27,7 @@ async function mount(
 it("headlines the next alarm time with its status and countdown", async () => {
   const next = new Date(Date.now() + 90 * 60_000);
   const { root } = await mount("armed", { enabled: true, next_fire: next.toISOString() }, "nb");
-  expect(root.querySelector(".hero [data-status]")!.textContent).toBe("Aktivert");
+  expect(root.querySelector(".hero [data-status]")!.textContent).toBe("Klar");
   expect(root.querySelector(".hero .current")!.textContent).toBe(
     next.toLocaleTimeString("nb", { hour: "2-digit", minute: "2-digit" }),
   );

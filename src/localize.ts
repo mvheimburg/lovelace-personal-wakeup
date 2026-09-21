@@ -184,7 +184,7 @@ const nb: Record<TranslationKey, string> = {
   Su: "Sø",
   On: "På",
   Off: "Av",
-  Armed: "Aktivert",
+  Armed: "Klar",
   Unavailable: "Utilgjengelig",
   Unknown: "Ukjent",
 };

@@ -178,7 +178,7 @@ it("updates an existing validation error when the language changes", async () =>
 
 it.each([
   ["disarmed", "Av"],
-  ["armed", "Aktivert"],
+  ["armed", "Klar"],
   ["rising", "Vekking pågår"],
   ["ringing", "Ringer"],
   ["snoozed", "Slumrer"],
