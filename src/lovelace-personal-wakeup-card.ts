@@ -1,7 +1,10 @@
 import { localize, language, formattingLocale, type TranslationKey } from "./localize";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, html, nothing } from "lit";
 import { property, state, customElement } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
+import { live } from "lit/directives/live.js";
+import { icon } from "./icons";
+import { styles } from "./styles";
 import "./lovelace-personal-wakeup-card-editor";
 
 interface HassEntity {
@@ -62,11 +65,20 @@ const STATE_LABELS: Record<string, TranslationKey> = {
 };
 
 const STATE_ICONS: Record<string, string> = {
-  disarmed: "mdi:alarm-off",
-  armed: "mdi:alarm",
-  rising: "mdi:weather-sunset-up",
-  ringing: "mdi:alarm-light",
-  snoozed: "mdi:alarm-snooze"
+  disarmed: "alarmOff",
+  armed: "alarm",
+  rising: "sunrise",
+  ringing: "ringing",
+  snoozed: "snooze"
+};
+
+/** Status tone per alarm state; unknown states read as neutral. */
+const STATE_TONES: Record<string, string> = {
+  armed: "ok",
+  rising: "warn",
+  ringing: "alarm",
+  snoozed: "snoozed",
+  disarmed: "off"
 };
 
 @customElement("lovelace-personal-wakeup-card")
@@ -229,6 +241,15 @@ export class PersonalWakeupCard extends LitElement {
     return s.length >= 5 && s.indexOf(":") === 2 ? s.slice(0, 5) : "07:00";
   }
 
+  /** Format an "HH:MM" setting as a clock time in the HA formatting locale. */
+  private _fmtClock(value: string): string {
+    const [h, m] = value.split(":").map(Number);
+    return new Date(2000, 0, 1, h, m).toLocaleTimeString(this._lang(), {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  }
+
   private _toast(message: string): void {
     this.dispatchEvent(
       new CustomEvent("hass-notification", {
@@ -301,21 +322,24 @@ export class PersonalWakeupCard extends LitElement {
 
   // ---------------------------------------------------------------- render
 
+  private _stateLabel(st: string): string {
+    return STATE_LABELS[st] ? this._t(STATE_LABELS[st]) : st;
+  }
+
   protected render() {
     const stateObj = this._entity();
     if (!stateObj) {
       return html`
         <ha-card>
-          <div class="error">
-            <ha-icon icon="mdi:alert-circle-outline"></ha-icon>
-            ${this._t("Entity not found")}: ${this._config?.entity || this._t("(not set)")}
+          <div class="error" role="alert">
+            ${icon("warning")}<span>${this._t("Entity not found")}: ${this._config?.entity || this._t("(not set)")}</span>
           </div>
         </ha-card>
       `;
     }
 
-    const live = stateObj.attributes;
-    const a = { ...live, ...this._settingsDraft };
+    const live_ = stateObj.attributes;
+    const a = { ...live_, ...this._settingsDraft };
     const advanced = this._advanced();
     const mode = a.wake_mode ?? "both";
     const lights = mode !== "music";
@@ -326,6 +350,8 @@ export class PersonalWakeupCard extends LitElement {
     const snoozed = st === "snoozed";
     const canStop = Boolean(a.can_stop) || active || snoozed;
     const canSnooze = Boolean(a.can_snooze) || active || snoozed;
+    // Device actions stay off while the alarm entity reports no data.
+    const noData = st === "unavailable" || st === "unknown";
 
     const enabled = Boolean(a.enabled);
     const requireHome = Boolean(a.require_home);
@@ -354,107 +380,48 @@ export class PersonalWakeupCard extends LitElement {
     ).sort((x, y) => x - y);
 
     const title = this._config.name || a.friendly_name || this._t("Wakeup alarm");
-    const icon = STATE_ICONS[st] ?? "mdi:alarm";
+    const tone = STATE_TONES[st] ?? "off";
+    const settingBusy = this._busy === "set_config";
 
     return html`
-      <ha-card class=${classMap({ [`is-${st}`]: true })}>
+      <ha-card class=${classMap({ [`is-${st}`]: true, [`sev-${tone}`]: true })}>
         <div class="header">
-          <div class="header-main">
-            <div class="icon-wrap"><ha-icon icon=${icon}></ha-icon></div>
-            <div class="header-text">
-              <div class="title">${title}</div>
-              <div class="subtitle">${this._renderSubtitle(st, nextFire, snoozeUntil, runStarted)}</div>
-            </div>
-          </div>
-          <div class="header-actions">
-            <div class="pill"><span class="dot"></span>${STATE_LABELS[st] ? this._t(STATE_LABELS[st]) : st}</div>
-            <button class="icon-button" type="button" title=${this._t("Configure")} aria-label=${this._t("Configure")}
-              @click=${this._openSettings}>
-              <ha-icon icon="mdi:cog-outline"></ha-icon>
-            </button>
-          </div>
+          <div class="title">${title}</div>
+          <button class="icon-button" type="button" title=${this._t("Configure")} aria-label=${this._t("Configure")}
+            @click=${this._openSettings}>${icon("cog")}</button>
         </div>
 
         ${canStop
-          ? html`
-              <div class="hero">
-                <div class="hero-text">
-                  ${snoozed
-                    ? html`<span class="hero-title">${this._t("Snoozed")}</span>
-                        <span class="hero-sub">${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}
-                          <em>${this._fmtRelative(snoozeUntil)}</em></span>`
-                    : st === "rising"
-                      ? html`<span class="hero-title">${this._t("Waking up")}</span>
-                          <span class="hero-sub">${live.wake_mode === "lights" ? this._t("Light") : live.wake_mode === "music" ? this._t("Music") : this._t("Light and music")} ${this._t("fading in since")}
-                            ${this._fmtTime(runStarted)}</span>`
-                      : html`<span class="hero-title">${this._t("Ringing")}</span>
-                          <span class="hero-sub">${this._t("Since")} ${this._fmtTime(runStarted)}</span>`}
-                </div>
-                <button
-                  class="stop"
-                  type="button"
-                  ?disabled=${this._busy === "stop"}
-                  @click=${() => this._call("stop")}
-                >
-                  <ha-icon icon="mdi:stop-circle-outline"></ha-icon>
-                  ${this._t("Stop")}
-                </button>
-                ${canSnooze
-                  ? html`
-                      <div class="snooze-row">
-                        <span class="snooze-label">
-                          <ha-icon icon="mdi:alarm-snooze"></ha-icon>${this._t("Snooze")}
-                        </span>
-                        ${presets.map(
-                          (m) => html`
-                            <button
-                              class=${classMap({ preset: true, primary: m === defaultSnooze })}
-                              type="button"
-                              ?disabled=${this._busy === `snooze-${m}`}
-                              @click=${() =>
-                                this._call("snooze", { duration_minutes: m }, `snooze-${m}`)}
-                            >
-                              ${m} min
-                            </button>
-                          `
-                        )}
-                      </div>
-                    `
-                  : nothing}
-              </div>
-            `
-          : nothing}
+          ? this._renderTakeover(st, live_.wake_mode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze)
+          : this._renderHero(st, tone, enabled, timeOfDay, nextFire)}
 
-        <div class="settings">
-          <div class="toggles">
-            <label class="toggle">
-              <span>
-                <ha-icon icon="mdi:power"></ha-icon>
-                ${this._t("Enabled")}
-              </span>
-              <ha-switch
-                .checked=${enabled}
-                @change=${(e: Event) =>
-                  this._set({ enabled: (e.target as HTMLInputElement).checked })}
-              ></ha-switch>
-            </label>
-            <label class="toggle">
-              <span>
-                <ha-icon icon="mdi:debug-step-over"></ha-icon>
-                ${this._t("Skip next")}
-                ${skipNext && skippedFire
-                  ? html`<small>${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}</small>`
-                  : nothing}
-              </span>
-              <ha-switch
-                .checked=${skipNext}
-                ?disabled=${!enabled}
-                @change=${(e: Event) =>
-                  this._set({ skip_next: (e.target as HTMLInputElement).checked })}
-              ></ha-switch>
-            </label>
-          </div>
-
+        <div class="settings rows">
+          <label class=${classMap({ row: true, "sev-ok": enabled, "sev-off": !enabled })}>
+            <span class="circ">${icon("power")}</span>
+            <span class="row-text">
+              <span class="name">${this._t("Enabled")}</span>
+              <span class=${classMap({ state: true, on: enabled })}>${enabled ? this._t("On") : this._t("Off")}</span>
+            </span>
+            <input type="checkbox" role="switch" class="switch" data-setting="enabled"
+              aria-label=${this._t("Enabled")}
+              .checked=${live(enabled)}
+              ?disabled=${noData || settingBusy}
+              @change=${(e: Event) => this._set({ enabled: (e.target as HTMLInputElement).checked })} />
+          </label>
+          <label class=${classMap({ row: true, "sev-warn": skipNext, "sev-off": !skipNext })}>
+            <span class="circ">${icon("skip")}</span>
+            <span class="row-text">
+              <span class="name">${this._t("Skip next")}</span>
+              ${skipNext && skippedFire
+                ? html`<span class="state on">${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}</span>`
+                : nothing}
+            </span>
+            <input type="checkbox" role="switch" class="switch" data-setting="skip_next"
+              aria-label=${this._t("Skip next")}
+              .checked=${live(skipNext)}
+              ?disabled=${!enabled || noData || settingBusy}
+              @change=${(e: Event) => this._set({ skip_next: (e.target as HTMLInputElement).checked })} />
+          </label>
         </div>
       </ha-card>
 
@@ -468,13 +435,11 @@ export class PersonalWakeupCard extends LitElement {
         <div class="dialog-header">
           <h2 id="settings-title">${title} ${this._t("settings")}</h2>
           <button class="icon-button" type="button" title=${this._t("Close settings")} aria-label=${this._t("Close settings")}
-            autofocus @click=${this._closeSettings}>
-            <ha-icon icon="mdi:close"></ha-icon>
-          </button>
+            autofocus @click=${this._closeSettings}>${icon("close")}</button>
         </div>
         <div class="settings">
           ${advanced ? html`<div class="field device-field">
-            <label class="label" for="wake-mode">${this._t("Wake mode")}</label>
+            <label class="label" for="wake-mode">${icon("sunrise", "s")}${this._t("Wake mode")}</label>
             <select id="wake-mode" aria-label=${this._t("Wake mode")} .value=${mode}
               @change=${(e: Event) => this._stage({ wake_mode: (e.target as HTMLSelectElement).value })}>
               <option value="lights" ?selected=${mode === "lights"}>${this._t("Lights only")}</option>
@@ -482,8 +447,8 @@ export class PersonalWakeupCard extends LitElement {
               <option value="both" ?selected=${mode === "both"}>${this._t("Lights and music")}</option>
             </select>
           </div>` : html`<p class="device-field">${this._t("Multiple people, wake modes and daily times require Personal Wakeup integration 0.4.0.")}</p>`}
-          <div class="field time-field">
-            <span class="label"><ha-icon icon="mdi:clock-outline"></ha-icon>${this._t("Alarm time")}</span>
+          <div class="field time-field wide">
+            <span class="label">${icon("clock", "s")}${this._t("Alarm time")}</span>
             <input
               class="time-input"
               type="time"
@@ -494,8 +459,8 @@ export class PersonalWakeupCard extends LitElement {
             />
           </div>
 
-          <div class="field">
-            <span class="label"><ha-icon icon="mdi:calendar-week"></ha-icon>${this._t("Repeat")}</span>
+          <div class="field wide">
+            <span class="label">${icon("calendar", "s")}${this._t("Repeat")}</span>
             <div class=${advanced ? "daily-times" : "weekdays"}>
               ${WEEKDAYS.map(
                 (d) => html`
@@ -506,9 +471,7 @@ export class PersonalWakeupCard extends LitElement {
                     class=${classMap({ day: true, on: weekdays.includes(d) })}
                     aria-pressed=${weekdays.includes(d)}
                     @click=${() => this._toggleWeekday(d, weekdays)}
-                  >
-                    ${this._t(WEEKDAY_LABELS[d])}
-                  </button>
+                  >${this._t(WEEKDAY_LABELS[d])}</button>
                   ${advanced ? html`<input class="time-input" type="time" data-day-time=${d}
                     aria-label=${`${this._dayName(d)} ${this._t("Alarm time")}`} .value=${dayTimes[d] ?? timeOfDay}
                     @change=${(e: Event) => {
@@ -525,12 +488,12 @@ export class PersonalWakeupCard extends LitElement {
             </div>
           </div>
 
-          ${lights ? this._renderSlider("mdi:weather-sunset-up", this._t("Light fade"), "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : nothing}
-          ${music ? html`${this._renderSlider("mdi:music-note", this._t("Music fade"), "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
-          ${this._renderSlider("mdi:volume-high", this._t("Volume"), "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
+          ${lights ? this._renderSlider("sunrise", this._t("Light fade"), "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : nothing}
+          ${music ? html`${this._renderSlider("music", this._t("Music fade"), "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
+          ${this._renderSlider("volume", this._t("Volume"), "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
 
           <div class="field">
-            <span class="label"><ha-icon icon="mdi:playlist-music"></ha-icon>${this._t("Playlist")}</span>
+            <span class="label">${icon("playlist", "s")}${this._t("Playlist")}</span>
             ${playlistOptions.length
               ? html`
                   <select
@@ -551,84 +514,138 @@ export class PersonalWakeupCard extends LitElement {
           ${music ? this._renderEntitySelector("ma_player_entity", this._t("Music player"), "media_player", a.ma_player_entity ?? a.player_entity) : nothing}
           ${this._renderEntitySelector(advanced ? "person_entities" : "person_entity", advanced ? this._t("People (anyone home)") : this._t("Person"), "person", advanced ? people : personEntity)}
           <div class="toggles">
-            <label class="toggle">
-              <span>
-                <ha-icon icon="mdi:home-account"></ha-icon>${this._t("Only when home")}
+            <label class=${classMap({ row: true, "sev-ok": requireHome, "sev-off": !requireHome })}>
+              <span class="circ">${icon("home")}</span>
+              <span class="row-text">
+                <span class="name">${this._t("Only when home")}</span>
                 ${people.length
-                  ? html`<small class=${classMap({ away: !anyoneHome })}>
-                      ${anyoneHome ? this._t("Someone home") : this._t("Nobody home")}
-                    </small>`
+                  ? html`<span class=${classMap({ state: true, away: !anyoneHome })}>${anyoneHome ? this._t("Someone home") : this._t("Nobody home")}</span>`
                   : nothing}
               </span>
-              <ha-switch .checked=${requireHome} ?disabled=${!people.length}
-                @change=${(e: Event) => this._set({ require_home: (e.target as HTMLInputElement).checked })}
-              ></ha-switch>
+              <input type="checkbox" role="switch" class="switch" data-setting="require_home"
+                aria-label=${this._t("Only when home")}
+                .checked=${live(requireHome)}
+                ?disabled=${!people.length || settingBusy}
+                @change=${(e: Event) => this._set({ require_home: (e.target as HTMLInputElement).checked })} />
             </label>
           </div>
         </div>
 
-        ${this._settingsError ? html`<p role="alert" class="error">${typeof this._settingsError === "string" ? this._settingsError : this._t(this._settingsError.key)}</p>` : nothing}
+        ${this._settingsError ? html`<p role="alert" class="error">${icon("warning", "s")}<span>${typeof this._settingsError === "string" ? this._settingsError : this._t(this._settingsError.key)}</span></p>` : nothing}
         ${advanced ? html`<div class="save-row">
           <span class="value muted">${this._t("Mode, targets, people and daily schedule save together.")}</span>
           <button class="text-button" data-discard type="button"
             ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
             @click=${() => { this._settingsDraft = {}; this._savedDraft = null; this._settingsError = ""; }}>${this._t("Discard changes")}</button>
-          <button class="text-button" data-save type="button"
+          <button class="text-button strong" data-save type="button"
             ?disabled=${this._busy !== null || !Object.keys(this._settingsDraft).length}
-            @click=${this._saveSettings}>${this._t("Save configuration")}</button>
+            @click=${this._saveSettings}>${this._busy === "set_config" ? icon("spinner", "s spin") : nothing}${this._t("Save configuration")}</button>
         </div>` : nothing}
         <div class="footer">
           <span class="footer-note">
             ${nextFire && !snoozed
-              ? html`<ha-icon icon="mdi:alarm-check"></ha-icon>
-                  ${this._t("Next:")} ${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)}`
+              ? html`${icon("alarm", "s")}<span>${this._t("Next:")} ${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)}</span>`
               : enabled
                 ? nothing
-                : html`<ha-icon icon="mdi:alarm-off"></ha-icon> ${this._t("Alarm is off")}`}
+                : html`${icon("alarmOff", "s")}<span>${this._t("Alarm is off")}</span>`}
           </span>
           <button
             class="text-button"
             type="button"
-            ?disabled=${this._busy === "trigger_now"}
+            ?disabled=${this._busy === "trigger_now" || noData}
             @click=${() => {
               this._closeSettings();
               return this._call("trigger_now");
             }}
-          >
-            <ha-icon icon="mdi:play-circle-outline"></ha-icon>
-            ${this._t("Test now")}
-          </button>
+          >${icon("play", "s")}${this._t("Test now")}</button>
         </div>
       </dialog>
     `;
   }
 
-  private _renderSubtitle(
-    st: string,
-    nextFire: string | null,
-    snoozeUntil: string | null,
-    runStarted: string | null
-  ) {
-    switch (st) {
-      case "armed":
-        return nextFire
-          ? `${this._fmtDay(nextFire)} ${this._fmtTime(nextFire)} · ${this._fmtRelative(nextFire)}`
-          : this._t("No upcoming alarm");
-      case "snoozed":
-        return `${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}`;
-      case "rising":
-        return `${this._t("Started")} ${this._fmtTime(runStarted)}`;
-      case "ringing":
-        return `${this._t("Ringing since")} ${this._fmtTime(runStarted)}`;
-      case "disarmed":
-        return this._t("Alarm is off");
-      default:
-        return "";
+  /** Calm states: the next alarm time is the headline. */
+  private _renderHero(st: string, tone: string, enabled: boolean, timeOfDay: string, nextFire: string | null) {
+    let headline = "—";
+    let dim = false;
+    let context = "";
+    if (st === "armed") {
+      if (nextFire) {
+        headline = this._fmtTime(nextFire);
+        context = `${this._fmtDay(nextFire)} · ${this._fmtRelative(nextFire)}`;
+      } else {
+        context = this._t("No upcoming alarm");
+      }
+    } else if (st === "disarmed" || !enabled) {
+      headline = this._fmtClock(timeOfDay);
+      dim = true;
+      context = this._t("Alarm is off");
     }
+    return html`
+      <div class="hero sev-${tone}">
+        <span class="circ big">${icon(STATE_ICONS[st] ?? "alarm")}</span>
+        <div class="hero-text">
+          <span class="status" data-status>${this._stateLabel(st)}</span>
+          <span class=${classMap({ current: true, dim })}>${headline}</span>
+          ${context ? html`<span class="context subtitle">${context}</span>` : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  /** Rising, ringing and snoozed take over the card with Stop and snooze. */
+  private _renderTakeover(
+    st: string,
+    wakeMode: string | undefined,
+    runStarted: string | null,
+    snoozeUntil: string | null,
+    canSnooze: boolean,
+    presets: number[],
+    defaultSnooze: number
+  ) {
+    const kind = st === "snoozed" || st === "rising" ? st : "ringing";
+    const tone = STATE_TONES[kind];
+    const channel = wakeMode === "lights" ? this._t("Light") : wakeMode === "music" ? this._t("Music") : this._t("Light and music");
+    const stopping = this._busy === "stop";
+    return html`
+      <section class="takeover is-${kind} sev-${tone}" aria-label=${this._stateLabel(kind)}>
+        <div class="takeover-head">
+          <span class="circ big">${icon(STATE_ICONS[kind])}</span>
+          <div class="hero-text">
+            <span class="hero-title" data-status>${this._stateLabel(kind)}</span>
+            ${kind === "snoozed"
+              ? html`<span class="hero-sub">${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}<em>${this._fmtRelative(snoozeUntil)}</em></span>`
+              : kind === "rising"
+                ? html`<span class="hero-sub">${channel} ${this._t("fading in since")} ${this._fmtTime(runStarted)}</span>`
+                : html`<span class="hero-sub">${this._t("Since")} ${this._fmtTime(runStarted)}</span>`}
+          </div>
+        </div>
+        <button class="stop" type="button" ?disabled=${stopping} aria-busy=${stopping ? "true" : "false"}
+          @click=${() => this._call("stop")}>${stopping ? icon("spinner", "spin") : icon("stop")}<span>${this._t("Stop")}</span></button>
+        ${canSnooze
+          ? html`
+              <div class="snooze-row" role="group" aria-label=${this._t("Snooze")}>
+                <span class="snooze-label">${icon("snooze", "s")}${this._t("Snooze")}</span>
+                <div class="presets">
+                ${presets.map(
+                  (m) => html`
+                    <button
+                      class=${classMap({ preset: true, primary: m === defaultSnooze })}
+                      type="button"
+                      ?disabled=${this._busy === `snooze-${m}`}
+                      @click=${() => this._call("snooze", { duration_minutes: m }, `snooze-${m}`)}
+                    >${m} min</button>
+                  `
+                )}
+                </div>
+              </div>
+            `
+          : nothing}
+      </section>
+    `;
   }
 
   private _renderSlider(
-    icon: string,
+    iconName: string,
     label: string,
     key: string,
     value: number,
@@ -641,7 +658,7 @@ export class PersonalWakeupCard extends LitElement {
     return html`
       <div class="field slider-field">
         <span class="label">
-          <ha-icon icon=${icon}></ha-icon>${label}
+          ${icon(iconName, "s")}${label}
           <span class="value">${display}</span>
         </span>
         <ha-slider
@@ -659,7 +676,7 @@ export class PersonalWakeupCard extends LitElement {
 
   private _renderEntitySelector(key: string, label: string, domain: string, value: string | string[] | null) {
     return html`
-      <div class="field device-field">
+      <div class="field device-field selector-field">
         <ha-selector
           data-key=${key}
           .hass=${this.hass}
@@ -685,453 +702,7 @@ export class PersonalWakeupCard extends LitElement {
     `;
   }
 
-  static styles = css`
-    :host {
-      --pw-accent: var(--primary-color, #03a9f4);
-      --pw-accent-text: var(--text-primary-color, #fff);
-      --pw-danger: var(--error-color, #db4437);
-      --pw-warn: var(--warning-color, #ff9800);
-      --pw-info: var(--info-color, #4a6cf7);
-      --pw-muted: var(--secondary-text-color, #727272);
-      --pw-surface: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
-      --pw-radius: var(--ha-card-border-radius, 12px);
-      --pw-ring-color: var(--pw-accent);
-    }
-
-    ha-card {
-      padding: 16px;
-      box-sizing: border-box;
-      overflow: hidden;
-    }
-    ha-card.is-ringing { --pw-ring-color: var(--pw-danger); }
-    ha-card.is-rising { --pw-ring-color: var(--pw-warn); }
-    ha-card.is-snoozed { --pw-ring-color: var(--pw-info); }
-    ha-card.is-disarmed { --pw-ring-color: var(--pw-muted); }
-
-    /* ---------- header ---------- */
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
-    .header-main {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 0;
-    }
-    .icon-wrap {
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      display: grid;
-      place-items: center;
-      flex: none;
-      background: color-mix(in srgb, var(--pw-ring-color) 16%, transparent);
-      color: var(--pw-ring-color);
-      transition: background 300ms, color 300ms;
-    }
-    .icon-wrap ha-icon {
-      --mdc-icon-size: 24px;
-    }
-    .is-ringing .icon-wrap {
-      animation: pw-pulse 1.4s ease-in-out infinite;
-    }
-    .header-text { min-width: 0; }
-    .title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      line-height: 1.25;
-      overflow-wrap: anywhere;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .subtitle {
-      font-size: 0.82rem;
-      color: var(--pw-muted);
-      margin-top: 2px;
-    }
-    .header-actions { display: flex; align-items: center; gap: 4px; flex: none; }
-    .icon-button {
-      display: inline-grid;
-      place-items: center;
-      width: 40px;
-      height: 40px;
-      padding: 0;
-      border: none;
-      border-radius: 50%;
-      background: transparent;
-      color: var(--pw-muted);
-      cursor: pointer;
-      flex: none;
-    }
-    .icon-button:hover { background: var(--pw-surface); }
-    button:focus-visible { outline: 2px solid var(--pw-accent); outline-offset: 2px; }
-    dialog {
-      box-sizing: border-box;
-      width: min(520px, calc(100vw - 32px));
-      max-height: calc(100dvh - 32px);
-      padding: 20px;
-      border: 1px solid var(--divider-color, #ddd);
-      border-radius: var(--pw-radius);
-      background: var(--card-background-color, #fff);
-      color: var(--primary-text-color, #212121);
-      box-shadow: 0 12px 40px #0004;
-      overflow: auto;
-    }
-    dialog::backdrop { background: #0007; }
-    .dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .dialog-header h2 { margin: 0; font-size: 1.1rem; font-weight: 600; overflow-wrap: anywhere; }
-    .device-field { grid-column: 1 / -1; }
-    ha-selector { display: block; min-width: 0; }
-    .pill {
-      flex: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      padding: 4px 10px;
-      border-radius: 999px;
-      color: var(--pw-ring-color);
-      background: color-mix(in srgb, var(--pw-ring-color) 14%, transparent);
-    }
-    .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-    .is-ringing .dot,
-    .is-rising .dot {
-      animation: pw-blink 1s steps(2, start) infinite;
-    }
-
-    /* ---------- hero (active alarm) ---------- */
-    .hero {
-      margin-top: 16px;
-      padding: 16px;
-      border-radius: var(--pw-radius);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      color: var(--pw-ring-color);
-      background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--pw-ring-color) 22%, transparent),
-        color-mix(in srgb, var(--pw-ring-color) 6%, transparent)
-      );
-      border: 1px solid color-mix(in srgb, var(--pw-ring-color) 30%, transparent);
-    }
-    .hero-text {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-    .hero-title {
-      font-size: 1.35rem;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-    .hero-sub {
-      font-size: 0.85rem;
-      color: var(--primary-text-color);
-      opacity: 0.85;
-    }
-    .hero-sub em {
-      font-style: normal;
-      color: var(--pw-muted);
-      margin-left: 6px;
-    }
-    .stop {
-      width: 100%;
-      padding: 16px;
-      border: none;
-      border-radius: calc(var(--pw-radius) - 2px);
-      background: var(--pw-danger);
-      color: #fff;
-      font-size: 1.1rem;
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      display: inline-flex;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      box-shadow: 0 6px 18px color-mix(in srgb, var(--pw-danger) 35%, transparent);
-      transition: transform 120ms ease, filter 120ms ease;
-    }
-    .stop ha-icon { --mdc-icon-size: 26px; }
-    .stop:hover { filter: brightness(1.05); }
-    .stop:active { transform: scale(0.985); }
-    .snooze-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .snooze-label {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--primary-text-color);
-      margin-right: 4px;
-    }
-    .snooze-label ha-icon { --mdc-icon-size: 18px; }
-    .preset {
-      flex: 1 1 auto;
-      min-width: 64px;
-      padding: 10px 12px;
-      border-radius: 999px;
-      border: 1px solid color-mix(in srgb, var(--pw-ring-color) 45%, transparent);
-      background: var(--card-background-color, #fff);
-      color: var(--primary-text-color);
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 120ms ease, background 120ms ease;
-    }
-    .preset.primary {
-      background: var(--pw-ring-color);
-      border-color: var(--pw-ring-color);
-      color: var(--pw-accent-text);
-    }
-    .preset:hover { filter: brightness(1.05); }
-    .preset:active { transform: scale(0.97); }
-    button:disabled { opacity: 0.6; cursor: progress; }
-
-    /* ---------- settings ---------- */
-    .settings {
-      margin-top: 16px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px 20px;
-    }
-    .toggles {
-      grid-column: 1 / -1;
-      display: flex;
-      flex-direction: column;
-      border-radius: calc(var(--pw-radius) - 4px);
-      background: var(--pw-surface);
-      overflow: hidden;
-    }
-    .toggle {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 12px;
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
-    .toggle + .toggle {
-      border-top: 1px solid color-mix(in srgb, var(--pw-muted) 18%, transparent);
-    }
-    .toggle > span {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      white-space: nowrap;
-    }
-    .toggle ha-icon {
-      --mdc-icon-size: 20px;
-      color: var(--pw-muted);
-    }
-    .toggle small {
-      font-size: 0.72rem;
-      color: var(--pw-muted);
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--pw-muted) 14%, transparent);
-    }
-    .toggle small.away {
-      color: var(--pw-warn);
-      background: color-mix(in srgb, var(--pw-warn) 14%, transparent);
-    }
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-width: 0;
-    }
-    .label {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--pw-muted);
-    }
-    .label ha-icon { --mdc-icon-size: 18px; }
-    .label .value {
-      margin-left: auto;
-      color: var(--primary-text-color);
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-    }
-    .value.muted { color: var(--pw-muted); font-weight: 400; }
-    .time-input,
-    select {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 8px 10px;
-      font-size: 1rem;
-      font-family: inherit;
-      border-radius: 8px;
-      border: 1px solid var(--divider-color, rgba(127,127,127,0.3));
-      background: var(--card-background-color, #fff);
-      color: var(--primary-text-color);
-    }
-    .time-input {
-      font-size: 1.25rem;
-      font-weight: 600;
-      font-variant-numeric: tabular-nums;
-    }
-    .save-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-size: 0.8rem; }
-    .daily-times { display: grid; gap: 6px; }
-    .day-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-    .daily-times .day { flex: 0 0 38px; }
-    .daily-times .time-input { min-width: 0; font-size: 1rem; }
-    .weekdays .day-row { flex: 1; }
-    .weekdays {
-      display: flex;
-      gap: 4px;
-    }
-    .day {
-      flex: 1;
-      padding: 7px 0;
-      border-radius: 8px;
-      border: 1px solid var(--divider-color, rgba(127,127,127,0.3));
-      background: transparent;
-      color: var(--pw-muted);
-      font-size: 0.78rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 120ms, color 120ms;
-    }
-    .day.on {
-      background: var(--pw-accent);
-      border-color: var(--pw-accent);
-      color: var(--pw-accent-text);
-    }
-    .slider-field ha-slider {
-      width: 100%;
-      margin: 0 -4px;
-    }
-
-    /* ---------- footer ---------- */
-    .footer {
-      margin-top: 14px;
-      padding-top: 10px;
-      border-top: 1px solid var(--divider-color, rgba(127,127,127,0.2));
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      font-size: 0.82rem;
-      color: var(--pw-muted);
-    }
-    .footer-note {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .footer ha-icon { --mdc-icon-size: 18px; }
-    .text-button {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: none;
-      background: transparent;
-      color: var(--pw-accent);
-      font-size: 0.82rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .text-button:hover {
-      background: color-mix(in srgb, var(--pw-accent) 10%, transparent);
-    }
-
-    .error {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--pw-danger);
-    }
-
-    @keyframes pw-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--pw-ring-color) 45%, transparent); }
-      50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--pw-ring-color) 0%, transparent); }
-    }
-    @keyframes pw-blink {
-      to { opacity: 0.25; }
-    }
-
-    :host([data-appearance="bubble"]) {
-      --pw-accent: var(--bubble-accent-color, var(--primary-color, #03a9f4));
-      --pw-surface: var(--bubble-secondary-background-color, var(--card-background-color, #fff));
-      --pw-radius: var(--bubble-border-radius, 28px);
-      --mdc-theme-primary: var(--pw-accent);
-      --switch-checked-color: var(--pw-accent);
-    }
-    :host([data-appearance="bubble"]) ha-card,
-    :host([data-appearance="bubble"]) dialog {
-      background: var(--bubble-main-background-color, var(--secondary-background-color, #f2f3f5));
-      border: var(--bubble-border, none);
-      border-radius: var(--pw-radius);
-      box-shadow: var(--bubble-box-shadow, none);
-    }
-    :host([data-appearance="bubble"]) .header { gap: 8px; }
-    :host([data-appearance="bubble"]) .title { font-size: 1rem; }
-    :host([data-appearance="bubble"]) .icon-wrap {
-      border-radius: var(--bubble-icon-border-radius, 50%);
-      background: var(--bubble-icon-background-color, var(--pw-surface));
-    }
-    :host([data-appearance="bubble"]) .icon-button,
-    :host([data-appearance="bubble"]) .text-button {
-      border-radius: var(--bubble-sub-button-border-radius, 20px);
-      background: var(--bubble-sub-button-background-color, var(--pw-surface));
-    }
-    :host([data-appearance="bubble"]) .icon-button:hover,
-    :host([data-appearance="bubble"]) .text-button:hover { filter: brightness(0.95); }
-    :host([data-appearance="bubble"]) .toggles {
-      border-radius: var(--bubble-sub-button-border-radius, 20px);
-    }
-    :host([data-appearance="bubble"]) .toggle { padding: 12px; }
-    :host([data-appearance="bubble"]) .pill { letter-spacing: 0; }
-    :host([data-appearance="bubble"]) .time-input,
-    :host([data-appearance="bubble"]) select {
-      background: var(--pw-surface);
-      border-radius: var(--bubble-sub-button-border-radius, 20px);
-    }
-    :host([data-appearance="bubble"]) .day,
-    :host([data-appearance="bubble"]) .preset {
-      border-radius: var(--bubble-sub-button-border-radius, 20px);
-    }
-    :host([data-appearance="bubble"]) .hero {
-      border-radius: var(--bubble-sub-button-border-radius, 20px);
-      background: color-mix(in srgb, var(--pw-ring-color) 12%, var(--pw-surface));
-    }
-    :host([data-appearance="bubble"]) .stop {
-      border-radius: var(--bubble-sub-button-border-radius, 24px);
-    }
-
-    @media (max-width: 480px) {
-      .settings { grid-template-columns: 1fr; }
-      dialog { padding: 16px; }
-      .header { gap: 6px; }
-      .header-main { gap: 8px; }
-      .toggle > span { white-space: normal; flex-wrap: wrap; }
-    }
-  `;
+  static styles = styles;
 }
 
 declare global {

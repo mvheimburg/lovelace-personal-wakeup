@@ -34,7 +34,7 @@ it.each(["nb", "NB_no", "no", "nn-NO"])(
     const root = card.shadowRoot!;
     expect(root.textContent).toContain("Vekkemodus");
     expect(root.querySelector('[aria-label="Konfigurer"]')).not.toBeNull();
-    const control = root.querySelector("ha-switch")! as HTMLElement & {
+    const control = root.querySelector('input[role="switch"]')! as HTMLElement & {
       checked: boolean;
     };
     control.checked = false;
@@ -199,7 +199,7 @@ it.each([
   };
   document.body.append(card);
   await card.updateComplete;
-  expect(card.shadowRoot!.querySelector(".pill")!.textContent).toBe(label);
+  expect(card.shadowRoot!.querySelector("[data-status]")!.textContent).toBe(label);
 });
 it("localizes missing entities while preserving their IDs", async () => {
   const card = new PersonalWakeupCard();

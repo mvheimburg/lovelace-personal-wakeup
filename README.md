@@ -6,23 +6,46 @@ A dashboard card for the
 [Personal Wakeup](https://github.com/mvheimburg/personal-wakeup)
 integration.
 
-![The card armed and ringing](images/screenshot.png)
+![Bubble appearance at night: armed with the next alarm as the headline, and ringing](images/bubble-night.png)
 
-- Big **Stop** button and one-tap **Snooze** presets while the alarm is
-  rising, ringing or snoozed.
-- Compact main card with status, next alarm countdown, Enabled and Skip next.
-- Gear button opens settings for alarm time, weekdays, fades, volume, playlist,
-  presence checking, and **Test now**.
-- Select the wakeup light, music player, and optional people in the modal.
+The card face holds only what you need in the morning:
+
+- A status panel with the next alarm time as the headline, the day and a
+  countdown. When the alarm is off it shows the configured time dimmed.
+- While the alarm is waking you up, ringing or snoozed, the panel takes over
+  the card with a big **Stop** button and one-tap **Snooze** presets. Ringing
+  turns the panel solid red with a white Stop button; waking up and snoozed
+  use a softer tint.
+- **Enabled** and **Skip next** switches. Both switch back to the value Home
+  Assistant reports if a request fails, and they are disabled while the alarm
+  entity is unavailable.
+- The round **Configure** button (top right) opens the settings dialog for
+  everything else: wake mode, alarm time, repeat days and daily times, fades,
+  volume, playlist, wakeup light, music player, people, **Only when home**, and
+  **Test now**.
+
+![Light theme: alarm off, and snoozed](images/light.png)
+
+- Select the wakeup light, music player, and optional people in the dialog.
   These selections persist in the integration options. Changing a selection
   stops an active alarm or snooze before applying it.
-- Close settings with the close button, Escape, or a click outside the modal.
+- Close settings with the close button, Escape, or a click outside the dialog.
 - Failed service calls show a Home Assistant toast instead of failing silently.
 
-On a phone the card stacks into a single column, with the Stop button and the
-snooze presets sized for a half-asleep thumb:
+On a phone the Stop button and the snooze presets are sized for a half-asleep
+thumb:
 
-<img src="images/ringing-phone.png" alt="The card ringing at phone width" width="320">
+<img src="images/ringing-phone.png" alt="The card waking up at phone width" width="320">
+
+<img src="images/settings.png" alt="The Configure dialog in Bubble appearance" width="360">
+
+### Redesign (0.5.0)
+
+Version 0.5.0 restyles the card to match the other cards in this family
+(House State, Water Guard, Access Control): a muted title with a round
+Configure button, a status panel with a large headline, pill-shaped controls,
+grouped rows with round icons, and inline icons. Behaviour, services,
+configuration keys and the visual editor are unchanged.
 
 ## Wakeup configuration (0.4.0)
 
@@ -76,16 +99,19 @@ The visual editor offers the same options.
 
 Choose **Default** or **Bubble** in the dashboard card editor, or add
 `appearance: bubble` to the card YAML. Omitting it keeps the default appearance.
-The Bubble preset styles both the compact card and its settings modal; it does
+The Bubble preset styles both the compact card and its settings dialog; it does
 not require Bubble Card to be installed.
 
-The preset inherits these shared CSS variables from your Home Assistant theme:
+Both appearances use your Home Assistant theme: `--card-background-color` and
+`--secondary-background-color` for surfaces, and `--success-color`,
+`--warning-color`, `--error-color`, `--primary-color` and
+`--disabled-text-color` for armed, waking up, ringing, snoozed and off. They
+work in light and dark themes. The Bubble preset also reads
 `--bubble-main-background-color`, `--bubble-secondary-background-color`,
 `--bubble-accent-color`, `--bubble-border-radius`, `--bubble-icon-border-radius`,
-`--bubble-icon-background-color`, `--bubble-sub-button-border-radius`,
-`--bubble-sub-button-background-color`, `--bubble-border`, and
+`--bubble-sub-button-border-radius`, `--bubble-border`, and
 `--bubble-box-shadow`. Without overrides it uses the current HA theme colors
-and rounded Bubble-style defaults. Alarm warning and stop colors stay distinct.
+and rounded Bubble-style defaults.
 
 For example, in an HA theme (theme keys omit the leading `--`):
 
@@ -106,6 +132,7 @@ npm test          # real card DOM and service payloads in Chromium
 npm run lint
 npm run typecheck
 npm run build      # writes dist/lovelace-personal-wakeup-card.js
+node scripts/screenshot.cjs   # regenerates images/ with simulated data
 ```
 
 CI checks that `dist/` is committed up to date. Releases are automatic: bump
