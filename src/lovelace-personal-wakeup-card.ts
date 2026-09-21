@@ -1,3 +1,5 @@
+import { applyColorScheme } from "./color-schemes";
+import type { ColorScheme } from "./color-schemes";
 import { localize, language, formattingLocale, type TranslationKey } from "./localize";
 import { LitElement, html, nothing } from "lit";
 import { property, state, customElement } from "lit/decorators.js";
@@ -29,6 +31,7 @@ interface PersonalWakeupCardConfig {
   entity: string;
   name?: string;
   appearance?: "default" | "bubble";
+  color_scheme?: ColorScheme;
   snooze_presets?: number[];
 }
 
@@ -147,6 +150,7 @@ export class PersonalWakeupCard extends LitElement {
     if (!config.entity) {
       throw new Error(this._t("Define an entity") + ": lovelace-personal-wakeup-card");
     }
+    applyColorScheme(this, config.color_scheme, this.hass);
     if (this._config?.entity !== config.entity) {
       this._settingsDraft = {};
       this._savedDraft = null;

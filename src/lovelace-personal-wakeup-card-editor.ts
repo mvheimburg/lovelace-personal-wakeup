@@ -1,3 +1,5 @@
+import { colorSchemeSchema, colorSchemeText } from "./color-schemes";
+import type { ColorScheme } from "./color-schemes";
 import { localize, type TranslationKey } from "./localize";
 import { LitElement, html, css } from "lit";
 import { property, state, customElement } from "lit/decorators.js";
@@ -13,6 +15,7 @@ interface PersonalWakeupCardConfig {
   entity: string;
   name?: string;
   appearance?: "default" | "bubble";
+  color_scheme?: ColorScheme;
   snooze_presets?: number[];
 }
 
@@ -24,7 +27,7 @@ export class PersonalWakeupCardEditor extends LitElement {
   private _t(key: TranslationKey): string { return localize(this.hass, key); }
 
   public setConfig(config: PersonalWakeupCardConfig): void {
-    this._config = { appearance: "default", ...config };
+    this._config = { appearance: "default", color_scheme: "home-assistant", ...config };
   }
 
   private _valueChanged(ev: CustomEvent): void {
@@ -82,6 +85,7 @@ export class PersonalWakeupCardEditor extends LitElement {
           }
         }
       },
+      colorSchemeSchema(this.hass),
       {
         name: "entity",
         required: true,
@@ -95,6 +99,7 @@ export class PersonalWakeupCardEditor extends LitElement {
     ];
 
     const LABELS: Record<string, string> = {
+      color_scheme: colorSchemeText(this.hass).label,
       appearance: this._t("Appearance"),
       entity: this._t("Wakeup alarm entity"),
       name: this._t("Name (optional)"),
