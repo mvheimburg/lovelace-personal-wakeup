@@ -284,6 +284,10 @@ const en = {
     "Use default time for": "Use default time for",
     "Action failed": "Action failed",
     "fading in since": "fading in since",
+    "Brightness at wake-up": "Brightness at wake-up",
+    "Sunrise from": "Sunrise from",
+    "Fully up at": "Fully up at",
+    "Wake-up at": "Wake-up at",
     Mo: "Mo",
     Tu: "Tu",
     We: "We",
@@ -363,6 +367,10 @@ const nb = {
     "Use default time for": "Bruk standardtid for",
     "Action failed": "Handlingen mislyktes",
     "fading in since": "trappes opp siden",
+    "Brightness at wake-up": "Lysstyrke ved vekking",
+    "Sunrise from": "Soloppgang fra",
+    "Fully up at": "Fullt lys kl.",
+    "Wake-up at": "Vekking kl.",
     Mo: "Ma",
     Tu: "Ti",
     We: "On",
@@ -1472,8 +1480,10 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const st = stateObj.state;
         const active = st === "rising" || st === "ringing";
         const snoozed = st === "snoozed";
-        const canStop = Boolean(a.can_stop) || active || snoozed;
-        const canSnooze = Boolean(a.can_snooze) || active || snoozed;
+        // The integration decides (a light alone has no snooze, and nothing to
+        // stop once it is up); older integrations do not report these.
+        const canStop = "can_stop" in live_ ? Boolean(live_.can_stop) : active || snoozed;
+        const canSnooze = "can_snooze" in live_ ? Boolean(live_.can_snooze) : active || snoozed;
         // Device actions stay off while the alarm entity reports no data.
         const noData = st === "unavailable" || st === "unknown";
         const enabled = Boolean(a.enabled);
@@ -1485,6 +1495,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const musicMin = this._draft.fade_music_duration ??
             Math.round(Number(a.fade_music_duration ?? 300) / 60);
         const volume = this._draft.volume ?? Number(a.volume ?? 0.25);
+        const wakeBrightness = this._draft.wake_brightness ?? Number(a.wake_brightness ?? 100);
         const playlist = a.playlist ?? "";
         const playlistOptions = Array.isArray(a.playlist_options)
             ? a.playlist_options
@@ -1493,6 +1504,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const skippedFire = a.skipped_fire ?? null;
         const snoozeUntil = a.snooze_until ?? null;
         const runStarted = a.run_started ?? null;
+        const wakeAt = live_.wake_at ?? null;
+        const fadeStart = live_.fade_start ?? null;
         const personEntity = a.person_entity ?? null;
         const people = Array.isArray(a.person_entities) ? a.person_entities : personEntity ? [personEntity] : [];
         const anyoneHome = people.some((person) => this.hass.states[person]?.state === "home");
@@ -1510,8 +1523,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         </div>
 
         ${canStop
-            ? this._renderTakeover(st, live_.wake_mode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze)
-            : this._renderHero(st, tone, enabled, timeOfDay, nextFire)}
+            ? this._renderTakeover(st, live_.wake_mode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze, wakeAt)
+            : this._renderHero(st, tone, enabled, timeOfDay, nextFire, fadeStart)}
 
         <div class="settings rows">
           <label class=${e({ row: true, "sev-ok": enabled, "sev-off": !enabled })}>
@@ -1608,6 +1621,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
           </div>
 
           ${lights ? this._renderSlider("sunrise", this._t("Light fade"), "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : E}
+          ${lights ? this._renderSlider("sunrise", this._t("Brightness at wake-up"), "wake_brightness", wakeBrightness, 10, 100, 5, `${wakeBrightness}%`) : E}
           ${music ? x `${this._renderSlider("music", this._t("Music fade"), "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
           ${this._renderSlider("volume", this._t("Volume"), "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
 
@@ -1679,7 +1693,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
     `;
     }
     /** Calm states: the next alarm time is the headline. */
-    _renderHero(st, tone, enabled, timeOfDay, nextFire) {
+    _renderHero(st, tone, enabled, timeOfDay, nextFire, fadeStart = null) {
         let headline = "—";
         let dim = false;
         let context = "";
@@ -1687,6 +1701,9 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             if (nextFire) {
                 headline = this._fmtTime(nextFire);
                 context = `${this._fmtDay(nextFire)} · ${this._fmtRelative(nextFire)}`;
+                // The sunrise runs before the alarm time; say when it begins.
+                if (fadeStart && fadeStart !== nextFire)
+                    context += ` · ${this._t("Sunrise from")} ${this._fmtTime(fadeStart)}`;
             }
             else {
                 context = this._t("No upcoming alarm");
@@ -1709,7 +1726,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
     `;
     }
     /** Rising, ringing and snoozed take over the card with Stop and snooze. */
-    _renderTakeover(st, wakeMode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze) {
+    _renderTakeover(st, wakeMode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze, wakeAt = null) {
         const kind = st === "snoozed" || st === "rising" ? st : "ringing";
         const tone = STATE_TONES[kind];
         const channel = wakeMode === "lights" ? this._t("Light") : wakeMode === "music" ? this._t("Music") : this._t("Light and music");
@@ -1723,7 +1740,7 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             ${kind === "snoozed"
             ? x `<span class="hero-sub">${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}<em>${this._fmtRelative(snoozeUntil)}</em></span>`
             : kind === "rising"
-                ? x `<span class="hero-sub">${channel} ${this._t("fading in since")} ${this._fmtTime(runStarted)}</span>`
+                ? x `<span class="hero-sub">${channel} ${this._t("fading in since")} ${this._fmtTime(runStarted)}${wakeAt ? x ` · ${wakeMode === "lights" ? this._t("Fully up at") : this._t("Wake-up at")} ${this._fmtTime(wakeAt)}` : E}</span>`
                 : x `<span class="hero-sub">${this._t("Since")} ${this._fmtTime(runStarted)}</span>`}
           </div>
         </div>

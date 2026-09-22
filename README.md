@@ -16,6 +16,16 @@ The card face holds only what you need in the morning:
   the card with a big **Stop** button and one-tap **Snooze** presets. Ringing
   turns the panel solid red with a white Stop button; waking up and snoozed
   use a softer tint.
+- The alarm time is when you wake: the light's sunrise runs for the **Light
+  fade** before it and is fully up at the alarm time; music starts then. The
+  armed panel says when the sunrise begins (*Sunrise from 06:15*), and during
+  it when the light is fully up. **Brightness at wake-up** (10–100%, in the
+  settings) sets how bright the light gets.
+- With **Lights only** there is nothing to snooze: the panel offers **Stop**
+  only while the light is rising, which stops the fade where it is, and goes
+  back to the next alarm once the light is up. The card follows the
+  integration's `can_stop` and `can_snooze`, so this needs Personal Wakeup
+  **0.6.0**; with an older integration Stop and Snooze show as before.
 - **Enabled** and **Skip next** switches. Both switch back to the value Home
   Assistant reports if a request fails, and they are disabled while the alarm
   entity is unavailable.

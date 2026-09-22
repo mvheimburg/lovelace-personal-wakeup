@@ -352,8 +352,10 @@ export class PersonalWakeupCard extends LitElement {
     const st = stateObj.state;
     const active = st === "rising" || st === "ringing";
     const snoozed = st === "snoozed";
-    const canStop = Boolean(a.can_stop) || active || snoozed;
-    const canSnooze = Boolean(a.can_snooze) || active || snoozed;
+    // The integration decides (a light alone has no snooze, and nothing to
+    // stop once it is up); older integrations do not report these.
+    const canStop = "can_stop" in live_ ? Boolean(live_.can_stop) : active || snoozed;
+    const canSnooze = "can_snooze" in live_ ? Boolean(live_.can_snooze) : active || snoozed;
     // Device actions stay off while the alarm entity reports no data.
     const noData = st === "unavailable" || st === "unknown";
 
@@ -367,6 +369,7 @@ export class PersonalWakeupCard extends LitElement {
       this._draft.fade_music_duration ??
       Math.round(Number(a.fade_music_duration ?? 300) / 60);
     const volume = this._draft.volume ?? Number(a.volume ?? 0.25);
+    const wakeBrightness = this._draft.wake_brightness ?? Number(a.wake_brightness ?? 100);
     const playlist: string = a.playlist ?? "";
     const playlistOptions: string[] = Array.isArray(a.playlist_options)
       ? a.playlist_options
@@ -375,6 +378,8 @@ export class PersonalWakeupCard extends LitElement {
     const skippedFire: string | null = a.skipped_fire ?? null;
     const snoozeUntil: string | null = a.snooze_until ?? null;
     const runStarted: string | null = a.run_started ?? null;
+    const wakeAt: string | null = live_.wake_at ?? null;
+    const fadeStart: string | null = live_.fade_start ?? null;
     const personEntity: string | null = a.person_entity ?? null;
     const people: string[] = Array.isArray(a.person_entities) ? a.person_entities : personEntity ? [personEntity] : [];
     const anyoneHome = people.some((person) => this.hass.states[person]?.state === "home");
@@ -396,8 +401,8 @@ export class PersonalWakeupCard extends LitElement {
         </div>
 
         ${canStop
-          ? this._renderTakeover(st, live_.wake_mode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze)
-          : this._renderHero(st, tone, enabled, timeOfDay, nextFire)}
+          ? this._renderTakeover(st, live_.wake_mode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze, wakeAt)
+          : this._renderHero(st, tone, enabled, timeOfDay, nextFire, fadeStart)}
 
         <div class="settings rows">
           <label class=${classMap({ row: true, "sev-ok": enabled, "sev-off": !enabled })}>
@@ -493,6 +498,7 @@ export class PersonalWakeupCard extends LitElement {
           </div>
 
           ${lights ? this._renderSlider("sunrise", this._t("Light fade"), "fade_duration", fadeMin, 1, 60, 1, `${fadeMin} min`, 60) : nothing}
+          ${lights ? this._renderSlider("sunrise", this._t("Brightness at wake-up"), "wake_brightness", wakeBrightness, 10, 100, 5, `${wakeBrightness}%`) : nothing}
           ${music ? html`${this._renderSlider("music", this._t("Music fade"), "fade_music_duration", musicMin, 1, 30, 1, `${musicMin} min`, 60)}
           ${this._renderSlider("volume", this._t("Volume"), "volume", volume, 0, 1, 0.05, `${Math.round(volume * 100)}%`)}
 
@@ -568,7 +574,14 @@ export class PersonalWakeupCard extends LitElement {
   }
 
   /** Calm states: the next alarm time is the headline. */
-  private _renderHero(st: string, tone: string, enabled: boolean, timeOfDay: string, nextFire: string | null) {
+  private _renderHero(
+    st: string,
+    tone: string,
+    enabled: boolean,
+    timeOfDay: string,
+    nextFire: string | null,
+    fadeStart: string | null = null
+  ) {
     let headline = "—";
     let dim = false;
     let context = "";
@@ -576,6 +589,9 @@ export class PersonalWakeupCard extends LitElement {
       if (nextFire) {
         headline = this._fmtTime(nextFire);
         context = `${this._fmtDay(nextFire)} · ${this._fmtRelative(nextFire)}`;
+        // The sunrise runs before the alarm time; say when it begins.
+        if (fadeStart && fadeStart !== nextFire)
+          context += ` · ${this._t("Sunrise from")} ${this._fmtTime(fadeStart)}`;
       } else {
         context = this._t("No upcoming alarm");
       }
@@ -604,7 +620,8 @@ export class PersonalWakeupCard extends LitElement {
     snoozeUntil: string | null,
     canSnooze: boolean,
     presets: number[],
-    defaultSnooze: number
+    defaultSnooze: number,
+    wakeAt: string | null = null
   ) {
     const kind = st === "snoozed" || st === "rising" ? st : "ringing";
     const tone = STATE_TONES[kind];
@@ -619,7 +636,7 @@ export class PersonalWakeupCard extends LitElement {
             ${kind === "snoozed"
               ? html`<span class="hero-sub">${this._t("Rings again at")} ${this._fmtTime(snoozeUntil)}<em>${this._fmtRelative(snoozeUntil)}</em></span>`
               : kind === "rising"
-                ? html`<span class="hero-sub">${channel} ${this._t("fading in since")} ${this._fmtTime(runStarted)}</span>`
+                ? html`<span class="hero-sub">${channel} ${this._t("fading in since")} ${this._fmtTime(runStarted)}${wakeAt ? html` · ${wakeMode === "lights" ? this._t("Fully up at") : this._t("Wake-up at")} ${this._fmtTime(wakeAt)}` : nothing}</span>`
                 : html`<span class="hero-sub">${this._t("Since")} ${this._fmtTime(runStarted)}</span>`}
           </div>
         </div>
