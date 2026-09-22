@@ -3,7 +3,7 @@
   <rect x="130" y="70" width="600" height="470" rx="24" fill="#FFFFFF"/>
   <rect x="130.5" y="70.5" width="599" height="469" rx="23.5" stroke="#D8E1E8"/>
 
-  <text x="170" y="126" fill="#18212B" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">Matilde wakeup</text>
+  <text x="170" y="126" fill="#18212B" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">Alex wakeup</text>
   <rect x="600" y="95" width="92" height="34" rx="17" fill="#1976D2"/>
   <text x="625" y="117" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">armed</text>
 
@@ -41,7 +41,7 @@
 
   <text x="170" y="490" fill="#6C7A89" font-family="Arial, Helvetica, sans-serif" font-size="15">Next alarm:</text>
   <text x="170" y="520" fill="#18212B" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">Tue, Mar 10, 7:00 AM</text>
-  <text x="170" y="546" fill="#6C7A89" font-family="Arial, Helvetica, sans-serif" font-size="14">Person: person.matilde</text>
+  <text x="170" y="546" fill="#6C7A89" font-family="Arial, Helvetica, sans-serif" font-size="14">Person: person.alex</text>
 
   <text x="170" y="578" fill="#6C7A89" font-family="Arial, Helvetica, sans-serif" font-size="15">Snooze delay</text>
   <text x="315" y="578" fill="#18212B" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">10 min</text>

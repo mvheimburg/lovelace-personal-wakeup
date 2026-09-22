@@ -14,7 +14,7 @@ function alarm(state) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   tomorrow.setHours(6, 30, 0, 0);
   const attributes = {
-    friendly_name: "Matilde",
+    friendly_name: "Alex",
     enabled: state !== "disarmed",
     time_of_day: "06:30:00",
     weekdays: ["mon", "tue", "wed", "thu", "fri"],
@@ -22,7 +22,7 @@ function alarm(state) {
     wake_mode: "both",
     light_entity: "light.bedroom",
     player_entity: "media_player.bedroom",
-    person_entities: ["person.matilde"],
+    person_entities: ["person.alex"],
     require_home: true,
     skip_next: false,
     fade_duration: 900,
@@ -36,8 +36,8 @@ function alarm(state) {
     snooze_until: state === "snoozed" ? at(8) : null,
   };
   return {
-    "sensor.matilde_wakeup": { entity_id: "sensor.matilde_wakeup", state, attributes },
-    "person.matilde": { entity_id: "person.matilde", state: "home", attributes: { friendly_name: "Matilde" } },
+    "sensor.alex_wakeup": { entity_id: "sensor.alex_wakeup", state, attributes },
+    "person.alex": { entity_id: "person.alex", state: "home", attributes: { friendly_name: "Alex" } },
   };
 }
 
@@ -75,7 +75,7 @@ async function shot(browser, errors, { file, theme, width = 1040, height = 700, 
     await customElements.whenDefined("lovelace-personal-wakeup-card");
     for (const { states, appearance, language } of cards) {
       const card = document.createElement("lovelace-personal-wakeup-card");
-      card.setConfig({ type: "custom:lovelace-personal-wakeup-card", entity: "sensor.matilde_wakeup", appearance });
+      card.setConfig({ type: "custom:lovelace-personal-wakeup-card", entity: "sensor.alex_wakeup", appearance });
       card.hass = { states, language, locale: { language }, callService: () => new Promise(() => {}) };
       document.querySelector("main").append(card);
       await card.updateComplete;

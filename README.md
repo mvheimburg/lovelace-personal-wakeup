@@ -98,8 +98,8 @@ Add this repository as a custom repository (category *Dashboard*) and install
 
 ```yaml
 type: custom:lovelace-personal-wakeup-card
-entity: sensor.matilde_wakeup
-name: Matilde           # optional, defaults to the entity's friendly name
+entity: sensor.alex_wakeup
+name: Alex           # optional, defaults to the entity's friendly name
 snooze_presets: [5, 10, 15]   # optional, minutes; the entity's default snooze is always included
 ```
 
