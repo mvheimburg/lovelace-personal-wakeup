@@ -1481,6 +1481,28 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
     _set(partial, label = "set_config") {
         return this._call("set_config", partial, label);
     }
+    /**
+     * Send the alarm time once editing ends: when the field loses focus (or on
+     * Enter), or at once when a picker changed it without focus. A browser reports
+     * a change as soon as the typed value is complete, e.g. after the hour. After a
+     * refusal the field shows the saved time again.
+     */
+    async _commitTime(current) {
+        const next = this._timeDraft?.slice(0, 5);
+        if (next === undefined || this._timeCommitting === next)
+            return;
+        if (!/^\d\d:\d\d$/.test(next) || next === current) {
+            this._timeDraft = this._timeCommitting = undefined;
+            return;
+        }
+        this._timeCommitting = next;
+        try {
+            await this._set({ time_of_day: next });
+        }
+        finally {
+            this._timeDraft = this._timeCommitting = undefined;
+        }
+    }
     _openSettings() {
         this.renderRoot.querySelector("dialog")?.showModal();
     }
@@ -1622,8 +1644,20 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
               class="time-input"
               type="time"
               aria-label=${this._t("Alarm time")}
-              .value=${timeOfDay}
-              @change=${(e) => this._set({ time_of_day: e.target.value })}
+              data-setting="time_of_day"
+              aria-busy=${this._timeCommitting ? "true" : "false"}
+              .value=${l(this._timeDraft ?? timeOfDay)}
+              @input=${(e) => (this._timeDraft = e.target.value)}
+              @change=${(e) => {
+            this._timeDraft = e.target.value;
+            if (this.shadowRoot?.activeElement !== e.target)
+                void this._commitTime(timeOfDay);
+        }}
+              @blur=${() => void this._commitTime(timeOfDay)}
+              @keydown=${(e) => {
+            if (e.key === "Enter")
+                e.target.blur();
+        }}
             />
           </div>
 
@@ -1882,6 +1916,9 @@ __decorate([
 __decorate([
     r()
 ], PersonalWakeupCard.prototype, "_busy", void 0);
+__decorate([
+    r()
+], PersonalWakeupCard.prototype, "_timeDraft", void 0);
 __decorate([
     r()
 ], PersonalWakeupCard.prototype, "_settingsDraft", void 0);

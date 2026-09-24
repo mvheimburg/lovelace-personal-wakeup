@@ -450,3 +450,39 @@ it("acknowledges a cleared inactive target reported as null and follows later ta
       .value,
   ).toBe("media_player.new");
 });
+it("sends a typed alarm time once editing ends, not when the hour is complete", async () => {
+  const { card, root, calls } = await mount();
+  const field = root.querySelector<HTMLInputElement>('[data-setting="time_of_day"]')!;
+  field.focus();
+  for (const value of ["08:00", "08:30"]) {
+    field.value = value;
+    field.dispatchEvent(new Event("input"));
+    field.dispatchEvent(new Event("change"));
+  }
+  await card.updateComplete;
+  expect(calls).toEqual([]);
+  expect(field.value).toBe("08:30");
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  await card.updateComplete;
+  expect(calls).toEqual([
+    ["personal_wakeup", "set_config", { entity_id: "sensor.alarm", time_of_day: "08:30" }],
+  ]);
+  // Unchanged: nothing is sent.
+  field.focus();
+  field.value = "07:00";
+  field.dispatchEvent(new Event("input"));
+  field.blur();
+  await card.updateComplete;
+  expect(calls).toHaveLength(1);
+});
+it("sends a picked alarm time at once and shows the saved one after a refusal", async () => {
+  const { card, root, calls } = await mount(base, true);
+  const field = root.querySelector<HTMLInputElement>('[data-setting="time_of_day"]')!;
+  await change(card, field, "09:15");
+  await card.updateComplete;
+  expect(calls).toEqual([
+    ["personal_wakeup", "set_config", { entity_id: "sensor.alarm", time_of_day: "09:15" }],
+  ]);
+  await card.updateComplete;
+  expect(field.value).toBe("07:00");
+});

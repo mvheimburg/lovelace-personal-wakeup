@@ -91,6 +91,9 @@ export class PersonalWakeupCard extends LitElement {
   /** Live slider values while dragging, keyed by attribute name. */
   @state() private _draft: Record<string, number> = {};
   @state() private _busy: string | null = null;
+  /** The alarm time being edited: sent when editing ends, not on every keystroke. */
+  @state() private _timeDraft?: string;
+  private _timeCommitting?: string;
   @state() private _settingsDraft: Record<string, any> = {};
   @state() private _settingsError: string | { key: TranslationKey } = "";
   private _savedDraft: Record<string, any> | null = null;
@@ -290,6 +293,27 @@ export class PersonalWakeupCard extends LitElement {
     return this._call("set_config", partial, label);
   }
 
+  /**
+   * Send the alarm time once editing ends: when the field loses focus (or on
+   * Enter), or at once when a picker changed it without focus. A browser reports
+   * a change as soon as the typed value is complete, e.g. after the hour. After a
+   * refusal the field shows the saved time again.
+   */
+  private async _commitTime(current: string): Promise<void> {
+    const next = this._timeDraft?.slice(0, 5);
+    if (next === undefined || this._timeCommitting === next) return;
+    if (!/^\d\d:\d\d$/.test(next) || next === current) {
+      this._timeDraft = this._timeCommitting = undefined;
+      return;
+    }
+    this._timeCommitting = next;
+    try {
+      await this._set({ time_of_day: next });
+    } finally {
+      this._timeDraft = this._timeCommitting = undefined;
+    }
+  }
+
   private _openSettings(): void {
     this.renderRoot.querySelector<HTMLDialogElement>("dialog")?.showModal();
   }
@@ -448,9 +472,18 @@ export class PersonalWakeupCard extends LitElement {
               class="time-input"
               type="time"
               aria-label=${this._t("Alarm time")}
-              .value=${timeOfDay}
-              @change=${(e: Event) =>
-                this._set({ time_of_day: (e.target as HTMLInputElement).value })}
+              data-setting="time_of_day"
+              aria-busy=${this._timeCommitting ? "true" : "false"}
+              .value=${live(this._timeDraft ?? timeOfDay)}
+              @input=${(e: Event) => (this._timeDraft = (e.target as HTMLInputElement).value)}
+              @change=${(e: Event) => {
+                this._timeDraft = (e.target as HTMLInputElement).value;
+                if (this.shadowRoot?.activeElement !== e.target) void this._commitTime(timeOfDay);
+              }}
+              @blur=${() => void this._commitTime(timeOfDay)}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
             />
           </div>
 

@@ -31,6 +31,9 @@ The card face holds only what you need in the morning:
   A switch pulses while its request is pending. Both switch back to the value
   Home Assistant reports if a request fails. They are disabled while the alarm
   entity is unavailable, and Skip next is also disabled while the alarm is off.
+- The alarm time is sent when you finish editing it (leave the field or press
+  Enter), or at once when a time picker sets it, so typing the hour no longer
+  sends a half-typed time. After a refusal the field shows the saved time again.
 - The round **Configure** button (top right) opens the settings dialog for
   everything else: wake mode, alarm time, repeat days and daily times, fades,
   volume, playlist, wakeup light, music player, people, **Only when home**, and
