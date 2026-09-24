@@ -43,10 +43,14 @@ it("headlines the next alarm time with its status and countdown", async () => {
   expect(root.querySelector(".hero .context")!.textContent).toContain(
     "om 1 t 30 min",
   );
-  expect(
-    root.querySelector('[data-setting="enabled"]')!.closest(".row")!
-      .textContent,
-  ).toContain("På");
+  const enabled = root.querySelector<HTMLButtonElement>('[data-toggle="enabled"]')!;
+  expect(enabled.getAttribute("role")).toBe("switch");
+  expect(enabled.getAttribute("aria-checked")).toBe("true");
+  expect(enabled.classList.contains("on")).toBe(true);
+  expect(enabled.textContent).toBe("Aktivert");
+  expect(root.querySelector('[data-toggle="skip_next"]')!.textContent).toBe(
+    "Hopp over neste",
+  );
 });
 
 it("shows the configured time dimmed when the alarm is off", async () => {
@@ -60,9 +64,12 @@ it("shows the configured time dimmed when the alarm is off", async () => {
     "Alarm is off",
   );
   expect(
-    (root.querySelector('[data-setting="skip_next"]') as HTMLInputElement)
+    root.querySelector<HTMLButtonElement>('[data-toggle="skip_next"]')!
       .disabled,
   ).toBe(true);
+  expect(
+    root.querySelector('[data-toggle="enabled"]')!.getAttribute("aria-checked"),
+  ).toBe("false");
 });
 
 it("restores the authoritative switch after a rejected request", async () => {
@@ -72,11 +79,10 @@ it("restores the authoritative switch after a rejected request", async () => {
     "en",
     true,
   );
-  const toggle = root.querySelector<HTMLInputElement>(
-    '[data-setting="enabled"]',
+  const toggle = root.querySelector<HTMLButtonElement>(
+    '[data-toggle="enabled"]',
   )!;
-  toggle.checked = false;
-  toggle.dispatchEvent(new Event("change"));
+  toggle.click();
   await card.updateComplete;
   await card.updateComplete;
   expect(calls).toEqual([
@@ -86,13 +92,89 @@ it("restores the authoritative switch after a rejected request", async () => {
       { entity_id: "sensor.alarm", enabled: false },
     ],
   ]);
-  expect(toggle.checked).toBe(true);
+  expect(toggle.getAttribute("aria-checked")).toBe("true");
+  expect(toggle.getAttribute("aria-busy")).toBe("false");
+  expect(toggle.disabled).toBe(false);
+  expect(root.querySelector('dialog [role="alert"]')!.textContent).toContain(
+    "Rejected",
+  );
+});
+
+it("sends Skip next, shows it pending and blocks duplicate requests", async () => {
+  let release!: () => void;
+  const calls: unknown[] = [];
+  const skipped = new Date();
+  skipped.setDate(skipped.getDate() + 3);
+  skipped.setHours(6, 30, 0, 0);
+  const { card, root } = await mount("armed", {
+    enabled: true,
+    skip_next: false,
+  }, "en-GB");
+  card.hass = {
+    ...card.hass,
+    callService: (...args: unknown[]) => {
+      calls.push(args);
+      return new Promise<void>((resolve) => (release = resolve));
+    },
+  };
+  await card.updateComplete;
+  const skip = root.querySelector<HTMLButtonElement>('[data-toggle="skip_next"]')!;
+  const enabled = root.querySelector<HTMLButtonElement>('[data-toggle="enabled"]')!;
+  expect(skip.getAttribute("aria-checked")).toBe("false");
+  expect(skip.disabled).toBe(false);
+  skip.click();
+  await card.updateComplete;
+  expect(skip.getAttribute("aria-busy")).toBe("true");
+  expect(skip.classList.contains("pending")).toBe(true);
+  expect(skip.disabled).toBe(true);
+  expect(enabled.disabled).toBe(true);
+  skip.click();
+  enabled.click();
+  expect(calls).toEqual([
+    [
+      "personal_wakeup",
+      "set_config",
+      { entity_id: "sensor.alarm", skip_next: true },
+    ],
+  ]);
+  release();
+  card.hass = {
+    ...card.hass,
+    states: {
+      "sensor.alarm": {
+        entity_id: "sensor.alarm",
+        state: "armed",
+        attributes: {
+          enabled: true,
+          skip_next: true,
+          skipped_fire: skipped.toISOString(),
+        },
+      },
+    },
+  };
+  await card.updateComplete;
+  await card.updateComplete;
+  expect(skip.getAttribute("aria-checked")).toBe("true");
+  expect(skip.classList.contains("skip")).toBe(true);
+  expect(skip.disabled).toBe(false);
+  expect(skip.querySelector("small")!.textContent).toBe(
+    `${skipped.toLocaleDateString("en-GB", { weekday: "short" })} 06:30`,
+  );
+  skip.click();
+  expect(calls[1]).toEqual([
+    "personal_wakeup",
+    "set_config",
+    { entity_id: "sensor.alarm", skip_next: false },
+  ]);
 });
 
 it("disables alarm actions while the entity is unavailable", async () => {
   const { root } = await mount("unavailable", { enabled: true });
   expect(
-    (root.querySelector('[data-setting="enabled"]') as HTMLInputElement)
+    root.querySelector<HTMLButtonElement>('[data-toggle="enabled"]')!.disabled,
+  ).toBe(true);
+  expect(
+    root.querySelector<HTMLButtonElement>('[data-toggle="skip_next"]')!
       .disabled,
   ).toBe(true);
   expect(root.querySelector('[aria-label="Configure"]')).not.toBeNull();

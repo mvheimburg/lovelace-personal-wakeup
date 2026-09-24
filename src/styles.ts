@@ -301,8 +301,65 @@ export const styles = css`
     }
   }
 
+  /* ---------- everyday toggles (as on the Time for School card) ---------- */
+  ha-card .settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  ha-card .toggles {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    flex: 1 1 120px;
+    min-width: 0;
+    min-height: 48px;
+    border: 0;
+    border-radius: 24px;
+    padding: 4px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--pw-text);
+    background: var(--pw-pill);
+    cursor: pointer;
+    text-align: left;
+  }
+  .pill-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+  }
+  .pill small {
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.85;
+  }
+  .pill.on {
+    --pill-accent: var(--pw-ok);
+    color: color-mix(in srgb, var(--pill-accent) 65%, var(--pw-text));
+    background: color-mix(in srgb, var(--pill-accent) 22%, var(--pw-pill));
+  }
+  .pill.skip.on {
+    --pill-accent: var(--pw-warn);
+  }
+  .pill.pending {
+    animation: pw-breathe 1.2s ease-in-out infinite;
+  }
+  @keyframes pw-breathe {
+    50% {
+      opacity: 0.55;
+    }
+  }
+
   /* ---------- grouped rows ---------- */
-  .settings.rows,
   .toggles {
     display: flex;
     flex-direction: column;
@@ -628,6 +685,7 @@ export const styles = css`
   }
   @media (prefers-reduced-motion: reduce) {
     .spin,
+    .pill.pending,
     .takeover.is-ringing .circ {
       animation: none;
     }

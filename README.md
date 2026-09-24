@@ -26,9 +26,11 @@ The card face holds only what you need in the morning:
   back to the next alarm once the light is up. The card follows the
   integration's `can_stop` and `can_snooze`, so this needs Personal Wakeup
   **0.6.0**; with an older integration Stop and Snooze show as before.
-- **Enabled** and **Skip next** switches. Both switch back to the value Home
-  Assistant reports if a request fails, and they are disabled while the alarm
-  entity is unavailable.
+- **Enabled** and **Skip next** pill switches, the same as on the Time for
+  School card. While Skip next is on it shows the skipped alarm's day and time.
+  A switch pulses while its request is pending. Both switch back to the value
+  Home Assistant reports if a request fails. They are disabled while the alarm
+  entity is unavailable, and Skip next is also disabled while the alarm is off.
 - The round **Configure** button (top right) opens the settings dialog for
   everything else: wake mode, alarm time, repeat days and daily times, fades,
   volume, playlist, wakeup light, music player, people, **Only when home**, and

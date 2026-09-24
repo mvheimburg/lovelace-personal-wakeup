@@ -286,8 +286,8 @@ export class PersonalWakeupCard extends LitElement {
     }
   }
 
-  private _set(partial: Record<string, unknown>): Promise<boolean> {
-    return this._call("set_config", partial, "set_config");
+  private _set(partial: Record<string, unknown>, label = "set_config"): Promise<boolean> {
+    return this._call("set_config", partial, label);
   }
 
   private _openSettings(): void {
@@ -390,7 +390,8 @@ export class PersonalWakeupCard extends LitElement {
 
     const title = this._config.name || a.friendly_name || this._t("Wakeup alarm");
     const tone = STATE_TONES[st] ?? "off";
-    const settingBusy = this._busy === "set_config";
+    // One settings request at a time: the toggles report theirs as toggle-<key>.
+    const settingBusy = this._busy === "set_config" || Boolean(this._busy?.startsWith("toggle-"));
 
     return html`
       <ha-card class=${classMap({ [`is-${st}`]: true, [`sev-${tone}`]: true })}>
@@ -404,33 +405,18 @@ export class PersonalWakeupCard extends LitElement {
           ? this._renderTakeover(st, live_.wake_mode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze, wakeAt)
           : this._renderHero(st, tone, enabled, timeOfDay, nextFire, fadeStart)}
 
-        <div class="settings rows">
-          <label class=${classMap({ row: true, "sev-ok": enabled, "sev-off": !enabled })}>
-            <span class="circ">${icon("power")}</span>
-            <span class="row-text">
-              <span class="name">${this._t("Enabled")}</span>
-              <span class=${classMap({ state: true, on: enabled })}>${enabled ? this._t("On") : this._t("Off")}</span>
-            </span>
-            <input type="checkbox" role="switch" class="switch" data-setting="enabled"
-              aria-label=${this._t("Enabled")}
-              .checked=${live(enabled)}
-              ?disabled=${noData || settingBusy}
-              @change=${(e: Event) => this._set({ enabled: (e.target as HTMLInputElement).checked })} />
-          </label>
-          <label class=${classMap({ row: true, "sev-warn": skipNext, "sev-off": !skipNext })}>
-            <span class="circ">${icon("skip")}</span>
-            <span class="row-text">
-              <span class="name">${this._t("Skip next")}</span>
-              ${skipNext && skippedFire
-                ? html`<span class="state on">${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}</span>`
-                : nothing}
-            </span>
-            <input type="checkbox" role="switch" class="switch" data-setting="skip_next"
-              aria-label=${this._t("Skip next")}
-              .checked=${live(skipNext)}
-              ?disabled=${!enabled || noData || settingBusy}
-              @change=${(e: Event) => this._set({ skip_next: (e.target as HTMLInputElement).checked })} />
-          </label>
+        <div class="settings">
+          <div class="toggles">
+            ${this._renderToggle("enabled", "power", this._t("Enabled"), enabled, noData || settingBusy)}
+            ${this._renderToggle(
+              "skip_next",
+              "skip",
+              this._t("Skip next"),
+              skipNext,
+              noData || settingBusy || !enabled,
+              skipNext && skippedFire ? `${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}` : ""
+            )}
+          </div>
         </div>
       </ha-card>
 
@@ -662,6 +648,31 @@ export class PersonalWakeupCard extends LitElement {
             `
           : nothing}
       </section>
+    `;
+  }
+
+  /** Enabled and Skip next: pill switches shared with the Time for School card. */
+  private _renderToggle(
+    key: "enabled" | "skip_next",
+    iconName: string,
+    label: string,
+    checked: boolean,
+    disabled: boolean,
+    detail = ""
+  ) {
+    const busyLabel = `toggle-${key}`;
+    const pending = this._busy === busyLabel;
+    return html`
+      <button
+        class=${classMap({ pill: true, skip: key === "skip_next", on: checked, pending })}
+        type="button"
+        role="switch"
+        aria-checked=${checked ? "true" : "false"}
+        aria-busy=${pending ? "true" : "false"}
+        data-toggle=${key}
+        ?disabled=${disabled || pending}
+        @click=${() => this._set({ [key]: !checked }, busyLabel)}
+      >${icon(iconName)}<span class="pill-text"><span>${label}</span>${detail ? html`<small>${detail}</small>` : nothing}</span></button>
     `;
   }
 

@@ -34,11 +34,10 @@ it.each(["nb", "NB_no", "no", "nn-NO"])(
     const root = card.shadowRoot!;
     expect(root.textContent).toContain("Vekkemodus");
     expect(root.querySelector('[aria-label="Konfigurer"]')).not.toBeNull();
-    const control = root.querySelector('input[role="switch"]')! as HTMLElement & {
-      checked: boolean;
-    };
-    control.checked = false;
-    control.dispatchEvent(new Event("change"));
+    const control = root.querySelector<HTMLButtonElement>('[data-toggle="enabled"]')!;
+    expect(control.getAttribute("role")).toBe("switch");
+    expect(control.textContent).toBe("Aktivert");
+    control.click();
     await card.updateComplete;
     expect(calls).toEqual([
       [
@@ -50,6 +49,8 @@ it.each(["nb", "NB_no", "no", "nn-NO"])(
     card.hass = { ...card.hass, language: "fr", locale: { language: "nb" } };
     await card.updateComplete;
     expect(root.querySelector('[aria-label="Configure"]')).not.toBeNull();
+    expect(root.querySelector('[data-toggle="enabled"]')!.textContent).toBe("Enabled");
+    expect(root.querySelector('[data-toggle="skip_next"]')!.textContent).toBe("Skip next");
     card.hass = { ...card.hass, language: undefined };
     await card.updateComplete;
     expect(root.querySelector('[aria-label="Konfigurer"]')).not.toBeNull();

@@ -739,8 +739,65 @@ const styles = i$4 `
     }
   }
 
+  /* ---------- everyday toggles (as on the Time for School card) ---------- */
+  ha-card .settings {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  ha-card .toggles {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    flex: 1 1 120px;
+    min-width: 0;
+    min-height: 48px;
+    border: 0;
+    border-radius: 24px;
+    padding: 4px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--pw-text);
+    background: var(--pw-pill);
+    cursor: pointer;
+    text-align: left;
+  }
+  .pill-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+  }
+  .pill small {
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.85;
+  }
+  .pill.on {
+    --pill-accent: var(--pw-ok);
+    color: color-mix(in srgb, var(--pill-accent) 65%, var(--pw-text));
+    background: color-mix(in srgb, var(--pill-accent) 22%, var(--pw-pill));
+  }
+  .pill.skip.on {
+    --pill-accent: var(--pw-warn);
+  }
+  .pill.pending {
+    animation: pw-breathe 1.2s ease-in-out infinite;
+  }
+  @keyframes pw-breathe {
+    50% {
+      opacity: 0.55;
+    }
+  }
+
   /* ---------- grouped rows ---------- */
-  .settings.rows,
   .toggles {
     display: flex;
     flex-direction: column;
@@ -1066,6 +1123,7 @@ const styles = i$4 `
   }
   @media (prefers-reduced-motion: reduce) {
     .spin,
+    .pill.pending,
     .takeover.is-ringing .circ {
       animation: none;
     }
@@ -1420,8 +1478,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             this._busy = null;
         }
     }
-    _set(partial) {
-        return this._call("set_config", partial, "set_config");
+    _set(partial, label = "set_config") {
+        return this._call("set_config", partial, label);
     }
     _openSettings() {
         this.renderRoot.querySelector("dialog")?.showModal();
@@ -1513,7 +1571,8 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
         const presets = Array.from(new Set([...(this._config.snooze_presets ?? DEFAULT_SNOOZE_PRESETS), defaultSnooze])).sort((x, y) => x - y);
         const title = this._config.name || a.friendly_name || this._t("Wakeup alarm");
         const tone = STATE_TONES[st] ?? "off";
-        const settingBusy = this._busy === "set_config";
+        // One settings request at a time: the toggles report theirs as toggle-<key>.
+        const settingBusy = this._busy === "set_config" || Boolean(this._busy?.startsWith("toggle-"));
         return x `
       <ha-card class=${e({ [`is-${st}`]: true, [`sev-${tone}`]: true })}>
         <div class="header">
@@ -1526,33 +1585,11 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             ? this._renderTakeover(st, live_.wake_mode, runStarted, snoozeUntil, canSnooze, presets, defaultSnooze, wakeAt)
             : this._renderHero(st, tone, enabled, timeOfDay, nextFire, fadeStart)}
 
-        <div class="settings rows">
-          <label class=${e({ row: true, "sev-ok": enabled, "sev-off": !enabled })}>
-            <span class="circ">${icon("power")}</span>
-            <span class="row-text">
-              <span class="name">${this._t("Enabled")}</span>
-              <span class=${e({ state: true, on: enabled })}>${enabled ? this._t("On") : this._t("Off")}</span>
-            </span>
-            <input type="checkbox" role="switch" class="switch" data-setting="enabled"
-              aria-label=${this._t("Enabled")}
-              .checked=${l(enabled)}
-              ?disabled=${noData || settingBusy}
-              @change=${(e) => this._set({ enabled: e.target.checked })} />
-          </label>
-          <label class=${e({ row: true, "sev-warn": skipNext, "sev-off": !skipNext })}>
-            <span class="circ">${icon("skip")}</span>
-            <span class="row-text">
-              <span class="name">${this._t("Skip next")}</span>
-              ${skipNext && skippedFire
-            ? x `<span class="state on">${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}</span>`
-            : E}
-            </span>
-            <input type="checkbox" role="switch" class="switch" data-setting="skip_next"
-              aria-label=${this._t("Skip next")}
-              .checked=${l(skipNext)}
-              ?disabled=${!enabled || noData || settingBusy}
-              @change=${(e) => this._set({ skip_next: e.target.checked })} />
-          </label>
+        <div class="settings">
+          <div class="toggles">
+            ${this._renderToggle("enabled", "power", this._t("Enabled"), enabled, noData || settingBusy)}
+            ${this._renderToggle("skip_next", "skip", this._t("Skip next"), skipNext, noData || settingBusy || !enabled, skipNext && skippedFire ? `${this._fmtDay(skippedFire)} ${this._fmtTime(skippedFire)}` : "")}
+          </div>
         </div>
       </ha-card>
 
@@ -1764,6 +1801,23 @@ let PersonalWakeupCard = class PersonalWakeupCard extends i$1 {
             `
             : E}
       </section>
+    `;
+    }
+    /** Enabled and Skip next: pill switches shared with the Time for School card. */
+    _renderToggle(key, iconName, label, checked, disabled, detail = "") {
+        const busyLabel = `toggle-${key}`;
+        const pending = this._busy === busyLabel;
+        return x `
+      <button
+        class=${e({ pill: true, skip: key === "skip_next", on: checked, pending })}
+        type="button"
+        role="switch"
+        aria-checked=${checked ? "true" : "false"}
+        aria-busy=${pending ? "true" : "false"}
+        data-toggle=${key}
+        ?disabled=${disabled || pending}
+        @click=${() => this._set({ [key]: !checked }, busyLabel)}
+      >${icon(iconName)}<span class="pill-text"><span>${label}</span>${detail ? x `<small>${detail}</small>` : E}</span></button>
     `;
     }
     _renderSlider(iconName, label, key, value, min, max, step, display, scale = 1) {
